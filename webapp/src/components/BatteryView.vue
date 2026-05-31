@@ -64,7 +64,13 @@
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    <tr v-for="(prop, key) in values" v-bind:key="key">
+                                                    <tr
+                                                        v-for="(prop, key) in values"
+                                                        v-bind:key="key"
+                                                        :class="{
+                                                            'table-warning': !isStringValue(prop) && prop.stale,
+                                                        }"
+                                                    >
                                                         <th scope="row">{{ $t('battery.' + key) }}</th>
                                                         <td class="value">
                                                             <template v-if="isStringValue(prop) && prop.translate">

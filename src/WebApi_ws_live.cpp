@@ -138,7 +138,8 @@ void WebApiWsLiveClass::generateOnBatteryJsonResponse(JsonVariant& root, bool al
 
         if (config.Battery.Enabled) {
             if (spStats->isSoCValid()) {
-                addTotalField(batteryObj, "soc", spStats->getSoC(), "%", spStats->getSoCPrecision());
+                addTotalField(batteryObj, "soc", spStats->getSoC(), "%", spStats->getSoCPrecision(),
+                        spStats->isSoCStale());
             }
 
             if (spStats->isVoltageValid()) {
@@ -151,6 +152,12 @@ void WebApiWsLiveClass::generateOnBatteryJsonResponse(JsonVariant& root, bool al
 
             if (spStats->isVoltageValid() && spStats->isCurrentValid()) {
                 addTotalField(batteryObj, "power", spStats->getVoltage() * spStats->getChargeCurrent(), "W", 1);
+            }
+
+            auto solarInputPower = spStats->getSolarInputPowerWatts();
+            if (solarInputPower.has_value()) {
+                addTotalField(batteryObj, "solarInputPower", *solarInputPower, "W", 1,
+                        spStats->isSolarInputPowerStale());
             }
         }
 
@@ -348,11 +355,12 @@ void WebApiWsLiveClass::addField(JsonObject& root, std::shared_ptr<InverterAbstr
     }
 }
 
-void WebApiWsLiveClass::addTotalField(JsonObject& root, const String& name, const float value, const String& unit, const uint8_t digits)
+void WebApiWsLiveClass::addTotalField(JsonObject& root, const String& name, const float value, const String& unit, const uint8_t digits, bool stale)
 {
     root[name]["v"] = value;
     root[name]["u"] = unit;
     root[name]["d"] = digits;
+    if (stale) { root[name]["stale"] = true; }
 }
 
 void WebApiWsLiveClass::onWebsocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len)

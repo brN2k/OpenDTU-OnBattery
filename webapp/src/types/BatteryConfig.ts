@@ -43,6 +43,11 @@ export interface BatteryMqttConfig {
     charge_current_limit_topic: string;
     charge_current_limit_json_path: string;
     charge_current_limit_unit: number;
+    solar_input_power_topic: string;
+    solar_input_power_json_path: string;
+    lowest_cell_voltage_topic: string;
+    lowest_cell_voltage_json_path: string;
+    topic_timeout: number;
 }
 
 export interface BatterySerialConfig {
@@ -67,4 +72,8 @@ export interface BatteryConfig {
     charge_current_limit_below_soc: number;
     charge_current_limit_below_voltage: number;
     use_battery_reported_charge_current_limit: boolean;
+    keep_at_soc_enabled: boolean;
+    keep_at_soc: number;
+    low_cell_voltage_protection_enabled: boolean;
+    low_cell_voltage_threshold: number;
 }

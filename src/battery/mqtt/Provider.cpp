@@ -85,6 +85,32 @@ bool Provider::init()
         }
     }
 
+    _solarInputPowerTopic = config.Battery.Mqtt.SolarInputPowerTopic;
+    if (!_solarInputPowerTopic.isEmpty()) {
+        MqttSettings.subscribe(_solarInputPowerTopic, 0/*QoS*/,
+                std::bind(&Provider::onMqttMessageSolarInputPower,
+                    this, std::placeholders::_1, std::placeholders::_2,
+                    std::placeholders::_3, std::placeholders::_4,
+                    config.Battery.Mqtt.SolarInputPowerJsonPath)
+                );
+
+        DTU_LOGD("Subscribed to '%s' for solar input power readings",
+            _solarInputPowerTopic.c_str());
+    }
+
+    _lowestCellVoltageTopic = config.Battery.Mqtt.LowestCellVoltageTopic;
+    if (!_lowestCellVoltageTopic.isEmpty()) {
+        MqttSettings.subscribe(_lowestCellVoltageTopic, 0/*QoS*/,
+                std::bind(&Provider::onMqttMessageLowestCellVoltage,
+                    this, std::placeholders::_1, std::placeholders::_2,
+                    std::placeholders::_3, std::placeholders::_4,
+                    config.Battery.Mqtt.LowestCellVoltageJsonPath)
+                );
+
+        DTU_LOGD("Subscribed to '%s' for lowest cell voltage readings",
+            _lowestCellVoltageTopic.c_str());
+    }
+
     return true;
 }
 
@@ -108,6 +134,14 @@ void Provider::deinit()
 
     if (!_chargeCurrentLimitTopic.isEmpty()) {
         MqttSettings.unsubscribe(_chargeCurrentLimitTopic);
+    }
+
+    if (!_solarInputPowerTopic.isEmpty()) {
+        MqttSettings.unsubscribe(_solarInputPowerTopic);
+    }
+
+    if (!_lowestCellVoltageTopic.isEmpty()) {
+        MqttSettings.unsubscribe(_lowestCellVoltageTopic);
     }
 }
 
@@ -257,6 +291,46 @@ void Provider::onMqttMessageChargeCurrentLimit(espMqttClientTypes::MessageProper
         return;
     }
     _stats->setChargeCurrentLimit(*amperage, millis());
+}
+
+void Provider::onMqttMessageSolarInputPower(espMqttClientTypes::MessageProperties const& properties,
+        char const* topic, uint8_t const* payload, size_t len,
+        char const* jsonPath)
+{
+    auto power = Utils::getNumericValueFromMqttPayload<float>("MqttBattery",
+            std::string(reinterpret_cast<const char*>(payload), len), topic,
+            jsonPath);
+
+    if (!power.has_value()) { return; }
+
+    if (*power < 0 || *power > 10000) {
+        DTU_LOGW("Implausible solar input power '%.2f' in topic '%s'", *power, topic);
+        return;
+    }
+
+    _stats->setSolarInputPowerWatts(*power, millis());
+
+    DTU_LOGD("Updated solar input power to %.1f W from '%s'", *power, topic);
+}
+
+void Provider::onMqttMessageLowestCellVoltage(espMqttClientTypes::MessageProperties const& properties,
+        char const* topic, uint8_t const* payload, size_t len,
+        char const* jsonPath)
+{
+    auto voltage = Utils::getNumericValueFromMqttPayload<float>("MqttBattery",
+            std::string(reinterpret_cast<const char*>(payload), len), topic,
+            jsonPath);
+
+    if (!voltage.has_value()) { return; }
+
+    if (*voltage < 0 || *voltage > 5) {
+        DTU_LOGW("Implausible lowest cell voltage '%.3f' in topic '%s'", *voltage, topic);
+        return;
+    }
+
+    _stats->setLowestCellVoltage(*voltage, millis());
+
+    DTU_LOGD("Updated lowest cell voltage to %.3f V from '%s'", *voltage, topic);
 }
 
 uint8_t Provider::calculatePrecision(float value) {

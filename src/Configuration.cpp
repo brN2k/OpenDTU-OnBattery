@@ -145,6 +145,10 @@ void ConfigurationClass::serializeBatteryConfig(BatteryConfig const& source, Jso
     target["charge_current_limit_below_soc"] = config.Battery.ChargeCurrentLimitBelowSoc;
     target["charge_current_limit_below_voltage"] = config.Battery.ChargeCurrentLimitBelowVoltage;
     target["use_battery_reported_charge_current_limit"] = config.Battery.UseBatteryReportedChargeCurrentLimit;
+    target["keep_at_soc_enabled"] = config.Battery.KeepAtSocEnabled;
+    target["keep_at_soc"] = config.Battery.KeepAtSoc;
+    target["low_cell_voltage_protection_enabled"] = config.Battery.LowCellVoltageProtectionEnabled;
+    target["low_cell_voltage_threshold"] = config.Battery.LowCellVoltageThreshold;
 }
 
 void ConfigurationClass::serializeBatteryZendureConfig(BatteryZendureConfig const& source, JsonObject& target, bool includeCredentials)
@@ -197,6 +201,11 @@ void ConfigurationClass::serializeBatteryMqttConfig(BatteryMqttConfig const& sou
     target["charge_current_limit_topic"] = source.ChargeCurrentLimitTopic;
     target["charge_current_limit_json_path"] = source.ChargeCurrentLimitJsonPath;
     target["charge_current_limit_unit"] = source.ChargeCurrentLimitUnit;
+    target["solar_input_power_topic"] = source.SolarInputPowerTopic;
+    target["solar_input_power_json_path"] = source.SolarInputPowerJsonPath;
+    target["lowest_cell_voltage_topic"] = source.LowestCellVoltageTopic;
+    target["lowest_cell_voltage_json_path"] = source.LowestCellVoltageJsonPath;
+    target["topic_timeout"] = source.TopicTimeout;
 }
 
 void ConfigurationClass::serializeBatterySerialConfig(BatterySerialConfig const& source, JsonObject& target)
@@ -598,6 +607,10 @@ void ConfigurationClass::deserializeBatteryConfig(JsonObject const& source, Batt
     target.ChargeCurrentLimitBelowSoc = source["charge_current_limit_below_soc"] | BATTERY_CHARGE_CURRENT_LIMIT_BELOW_SOC;
     target.ChargeCurrentLimitBelowVoltage = source["charge_current_limit_below_voltage"] | BATTERY_CHARGE_CURRENT_LIMIT_BELOW_VOLTAGE;
     target.UseBatteryReportedChargeCurrentLimit = source["use_battery_reported_charge_current_limit"] | BATTERY_USE_BATTERY_REPORTED_CHARGE_CURRENT_LIMIT;
+    target.KeepAtSocEnabled = source["keep_at_soc_enabled"] | BATTERY_KEEP_AT_SOC_ENABLED;
+    target.KeepAtSoc = source["keep_at_soc"] | BATTERY_KEEP_AT_SOC;
+    target.LowCellVoltageProtectionEnabled = source["low_cell_voltage_protection_enabled"] | BATTERY_LOW_CELL_VOLTAGE_PROTECTION_ENABLED;
+    target.LowCellVoltageThreshold = source["low_cell_voltage_threshold"] | BATTERY_LOW_CELL_VOLTAGE_THRESHOLD;
 }
 
 void ConfigurationClass::deserializeBatteryZendureConfig(JsonObject const& source, BatteryZendureConfig& target)
@@ -647,6 +660,11 @@ void ConfigurationClass::deserializeBatteryMqttConfig(JsonObject const& source, 
     strlcpy(target.ChargeCurrentLimitTopic, source["charge_current_limit_topic"] | "", sizeof(target.ChargeCurrentLimitTopic));
     strlcpy(target.ChargeCurrentLimitJsonPath, source["charge_current_limit_json_path"] | "", sizeof(target.ChargeCurrentLimitJsonPath));
     target.ChargeCurrentLimitUnit = source["charge_current_limit_unit"] | BatteryAmperageUnit::Amps;
+    strlcpy(target.SolarInputPowerTopic, source["solar_input_power_topic"] | "", sizeof(target.SolarInputPowerTopic));
+    strlcpy(target.SolarInputPowerJsonPath, source["solar_input_power_json_path"] | "", sizeof(target.SolarInputPowerJsonPath));
+    strlcpy(target.LowestCellVoltageTopic, source["lowest_cell_voltage_topic"] | "", sizeof(target.LowestCellVoltageTopic));
+    strlcpy(target.LowestCellVoltageJsonPath, source["lowest_cell_voltage_json_path"] | "", sizeof(target.LowestCellVoltageJsonPath));
+    target.TopicTimeout = source["topic_timeout"] | BATTERY_MQTT_TOPIC_TIMEOUT;
 }
 
 void ConfigurationClass::deserializeBatterySerialConfig(JsonObject const& source, BatterySerialConfig& target)

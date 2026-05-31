@@ -10,7 +10,7 @@
 
 #define CONFIG_FILENAME "/config.json"
 #define CONFIG_VERSION 0x00011e00 // 0.1.30 // make sure to clean all after change
-#define CONFIG_VERSION_ONBATTERY 8
+#define CONFIG_VERSION_ONBATTERY 9
 
 #define WIFI_MAX_SSID_STRLEN 32
 #define WIFI_MAX_PASSWORD_STRLEN 64
@@ -238,6 +238,11 @@ struct BATTERY_MQTT_CONFIG_T {
     char ChargeCurrentLimitTopic[MQTT_MAX_TOPIC_STRLEN + 1];
     char ChargeCurrentLimitJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
     BatteryAmperageUnit ChargeCurrentLimitUnit;
+    char SolarInputPowerTopic[MQTT_MAX_TOPIC_STRLEN + 1];
+    char SolarInputPowerJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
+    char LowestCellVoltageTopic[MQTT_MAX_TOPIC_STRLEN + 1];
+    char LowestCellVoltageJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
+    uint16_t TopicTimeout;
 };
 using BatteryMqttConfig = struct BATTERY_MQTT_CONFIG_T;
 
@@ -264,6 +269,10 @@ struct BATTERY_CONFIG_T {
     float ChargeCurrentLimitBelowSoc;
     float ChargeCurrentLimitBelowVoltage;
     bool UseBatteryReportedChargeCurrentLimit;
+    bool KeepAtSocEnabled;
+    uint8_t KeepAtSoc;
+    bool LowCellVoltageProtectionEnabled;
+    float LowCellVoltageThreshold;
 };
 using BatteryConfig = struct BATTERY_CONFIG_T;
 

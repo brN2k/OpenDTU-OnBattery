@@ -160,6 +160,111 @@
                         </div>
                     </div>
                 </CardElement>
+
+                <CardElement
+                    :text="$t('batteryadmin.MqttSolarInputPowerConfiguration')"
+                    textVariant="text-bg-primary"
+                    addSpace
+                >
+                    <InputElement
+                        :label="$t('batteryadmin.MqttSolarInputPowerTopic')"
+                        v-model="batteryConfigList.mqtt.solar_input_power_topic"
+                        type="text"
+                        maxlength="256"
+                        wide
+                    />
+
+                    <InputElement
+                        :label="$t('batteryadmin.MqttJsonPath')"
+                        v-model="batteryConfigList.mqtt.solar_input_power_json_path"
+                        type="text"
+                        maxlength="256"
+                        :tooltip="$t('batteryadmin.MqttJsonPathDescription')"
+                        wide
+                    />
+                </CardElement>
+
+                <CardElement
+                    :text="$t('batteryadmin.MqttLowestCellVoltageConfiguration')"
+                    textVariant="text-bg-primary"
+                    addSpace
+                >
+                    <InputElement
+                        :label="$t('batteryadmin.MqttLowestCellVoltageTopic')"
+                        v-model="batteryConfigList.mqtt.lowest_cell_voltage_topic"
+                        type="text"
+                        maxlength="256"
+                        wide
+                    />
+
+                    <InputElement
+                        :label="$t('batteryadmin.MqttJsonPath')"
+                        v-model="batteryConfigList.mqtt.lowest_cell_voltage_json_path"
+                        type="text"
+                        maxlength="256"
+                        :tooltip="$t('batteryadmin.MqttJsonPathDescription')"
+                        wide
+                    />
+                </CardElement>
+
+                <CardElement :text="$t('batteryadmin.MqttTimeoutConfiguration')" textVariant="text-bg-primary" addSpace>
+                    <InputElement
+                        :label="$t('batteryadmin.MqttTopicTimeout')"
+                        v-model="batteryConfigList.mqtt.topic_timeout"
+                        type="number"
+                        min="1"
+                        max="3600"
+                        step="1"
+                        :postfix="$t('batteryadmin.Seconds')"
+                        wide
+                    />
+                </CardElement>
+
+                <CardElement :text="$t('batteryadmin.KeepAtSocConfiguration')" textVariant="text-bg-primary" addSpace>
+                    <InputElement
+                        :label="$t('batteryadmin.KeepAtSocEnabled')"
+                        v-model="batteryConfigList.keep_at_soc_enabled"
+                        type="checkbox"
+                        wide
+                    />
+
+                    <InputElement
+                        v-if="batteryConfigList.keep_at_soc_enabled"
+                        :label="$t('batteryadmin.KeepAtSoc')"
+                        v-model="batteryConfigList.keep_at_soc"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        postfix="%"
+                        wide
+                    />
+                </CardElement>
+
+                <CardElement
+                    :text="$t('batteryadmin.LowCellVoltageProtectionConfiguration')"
+                    textVariant="text-bg-primary"
+                    addSpace
+                >
+                    <InputElement
+                        :label="$t('batteryadmin.LowCellVoltageProtectionEnabled')"
+                        v-model="batteryConfigList.low_cell_voltage_protection_enabled"
+                        type="checkbox"
+                        wide
+                    />
+
+                    <InputElement
+                        v-if="batteryConfigList.low_cell_voltage_protection_enabled"
+                        :label="$t('batteryadmin.LowCellVoltageThreshold')"
+                        v-model="batteryConfigList.low_cell_voltage_threshold"
+                        type="number"
+                        min="0"
+                        max="5"
+                        step="0.001"
+                        postfix="V"
+                        wide
+                    />
+                </CardElement>
             </template>
 
             <CardElement

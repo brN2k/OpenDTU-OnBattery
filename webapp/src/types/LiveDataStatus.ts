@@ -2,7 +2,8 @@ export interface ValueObject {
     v: number; // value
     u: string; // unit
     d: number; // digits
-    max: number;
+    max?: number;
+    stale?: boolean;
 }
 
 export interface InverterStatistics {
@@ -80,6 +81,7 @@ export interface Battery {
     voltage?: ValueObject;
     power?: ValueObject;
     current?: ValueObject;
+    solarInputPower?: ValueObject;
 }
 
 export interface PowerMeter {

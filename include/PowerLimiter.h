@@ -91,13 +91,19 @@ private:
     uint16_t dcPowerBusToInverterAc(uint16_t dcPower) const;
     void unconditionalFullSolarPassthrough();
     uint16_t calcTargetOutput() const;
+    uint16_t applyBatteryKeepAtSoc(uint16_t targetOutput) const;
     using inverter_filter_t = std::function<bool(PowerLimiterInverter const&)>;
     uint16_t updateInverterLimits(uint16_t powerRequested, inverter_filter_t filter, std::string const& filterExpression);
     uint16_t calcPowerBusUsage(uint16_t powerRequested) const;
     bool updateInverters();
     uint16_t getSolarPassthroughPower() const;
+    uint16_t getBatterySolarInputPassthroughPower() const;
+    uint16_t getStorageBackedInvertersConfiguredMaxPowerWatts() const;
+    bool usesStorageBackedInverter() const;
+    bool isBatteryKeepAtSocForceDischargeActive() const;
     std::optional<uint16_t> getBatteryDischargeLimit() const;
     float getBatteryInvertersOutputAcWatts() const;
+    bool isLowCellVoltageProtectionActive() const;
 
     bool testThreshold(float socThreshold, float voltThreshold,
             std::function<bool(float, float)> compare) const;

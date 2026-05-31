@@ -384,6 +384,7 @@ void PowerLimiterClass::loop()
     }
 
     uint16_t inverterTotalPower = calcTargetOutput();
+    inverterTotalPower = applyBatteryKeepAtSoc(inverterTotalPower);
 
     auto totalAllowance = config.PowerLimiter.TotalUpperPowerLimit;
     inverterTotalPower = std::min(inverterTotalPower, totalAllowance);
@@ -620,6 +621,52 @@ uint16_t PowerLimiterClass::calcTargetOutput() const
     return static_cast<uint16_t>(targetOutput);
 }
 
+uint16_t PowerLimiterClass::applyBatteryKeepAtSoc(uint16_t targetOutput) const
+{
+    auto const& config = Configuration.get();
+
+    if (!config.Battery.Enabled || !config.Battery.KeepAtSocEnabled || !usesStorageBackedInverter()) {
+        return targetOutput;
+    }
+
+    auto stats = Battery.getStats();
+    if (!stats->isSoCValid()
+            || stats->isSoCStale()) {
+        return targetOutput;
+    }
+
+    float const soc = stats->getSoC();
+    float const targetSoc = config.Battery.KeepAtSoc;
+
+    if (soc < targetSoc) {
+        return targetOutput;
+    }
+
+    if (soc > targetSoc) {
+        auto maxStorageOutput = getStorageBackedInvertersConfiguredMaxPowerWatts();
+        DTU_LOGD("keep-at-SoC active: SoC %.1f %% is above target %.1f %%, "
+                "requesting max storage-backed output %u W",
+                soc, targetSoc, maxStorageOutput);
+        return std::max(targetOutput, maxStorageOutput);
+    }
+
+    auto solarInputPower = stats->getSolarInputPowerWatts();
+    if (!solarInputPower.has_value() || stats->isSolarInputPowerStale()) {
+        return targetOutput;
+    }
+
+    auto batterySolarInputPower = static_cast<uint16_t>(
+            std::round(std::max<float>(0, *solarInputPower)));
+
+    if (batterySolarInputPower > targetOutput) {
+        DTU_LOGD("keep-at-SoC active: SoC %.1f %% reached target %.1f %%, "
+                "passing through %u W battery solar input",
+                soc, targetSoc, batterySolarInputPower);
+    }
+
+    return std::max(targetOutput, batterySolarInputPower);
+}
+
 /**
  * assigns new limits to all inverters matching the filter. returns the total
  * amount of power these inverters are expected to produce after the new limits
@@ -645,9 +692,19 @@ uint16_t PowerLimiterClass::updateInverterLimits(uint16_t powerRequested,
     // if we update battery-powered inverters and the battery is in the STOP state,
     // we must put all battery-powered inverters into standby mode,
     // regardless of whether the standby option is enabled or not.
-    if ((matchingInverters[0]->isBatteryPowered()) && (_batteryState == BatteryState::STOP)) {
+    if ((matchingInverters[0]->isBatteryPowered())
+            && (_batteryState == BatteryState::STOP)
+            && !isBatteryKeepAtSocForceDischargeActive()
+            && getBatterySolarInputPassthroughPower() == 0) {
         for (auto pInv : matchingInverters) { pInv->standby(); }
         DTU_LOGD("battery is in STOP state, all battery-powered inverters are put into standby.");
+        return 0;
+    }
+
+    if ((matchingInverters[0]->isBatteryPowered() || matchingInverters[0]->isSmartBufferPowered())
+            && isLowCellVoltageProtectionActive()) {
+        for (auto pInv : matchingInverters) { pInv->standby(); }
+        DTU_LOGD("low cell voltage protection active, all storage-backed inverters are put into standby.");
         return 0;
     }
 
@@ -729,53 +786,74 @@ uint16_t PowerLimiterClass::updateInverterLimits(uint16_t powerRequested,
 // solar charge controller(s), possibly an AC charger, as well as the battery.
 uint16_t PowerLimiterClass::calcPowerBusUsage(uint16_t powerRequested) const
 {
+    if (isLowCellVoltageProtectionActive()) {
+        DTU_LOGD("DC power bus usage blocked by low cell voltage protection");
+        return 0;
+    }
+
+    auto keepAtSocForceDischarge = isBatteryKeepAtSocForceDischargeActive();
+
     // We check if the PSU is on and disable battery-powered inverters in this
     // case. The PSU should reduce power or shut down first before the
     // battery-powered inverters kick in. The only case where this is not
     // desired is if the battery is over the Full Solar Passthrough Threshold.
     // In this case battery-powered inverters should produce power and the PSU
     // will shut down as a consequence.
-    if (!isFullSolarPassthroughActive() && GridCharger.getAutoPowerStatus()) {
+    if (!keepAtSocForceDischarge && !isFullSolarPassthroughActive() && GridCharger.getAutoPowerStatus()) {
         DTU_LOGD("DC power bus usage blocked by GridCharger auto power");
         return 0;
     }
 
-    if (Battery.getStats()->getImmediateChargingRequest()) {
+    if (!keepAtSocForceDischarge && Battery.getStats()->getImmediateChargingRequest()) {
         DTU_LOGD("DC power bus usage blocked by immediate charging request");
         return 0;
     }
 
-    if (_batteryState == BatteryState::STOP) {
+    auto batterySolarInputAc = getBatterySolarInputPassthroughPower();
+
+    if (!keepAtSocForceDischarge
+            && _batteryState == BatteryState::STOP
+            && batterySolarInputAc == 0) {
         DTU_LOGD("DC power bus usage blocked by battery below the stop threshold");
         return 0;
     }
 
     auto solarOutputDc = getSolarPassthroughPower();
     auto solarOutputAc = dcPowerBusToInverterAc(solarOutputDc);
-    if (isFullSolarPassthroughActive() && solarOutputAc > powerRequested) {
-        DTU_LOGD("using %u/%u W DC/AC from DC power bus (full solar-passthrough)",
-                solarOutputDc, solarOutputAc);
+    uint32_t passthroughAc = static_cast<uint32_t>(solarOutputAc) + batterySolarInputAc;
 
-        return solarOutputAc;
+    if (keepAtSocForceDischarge) {
+        DTU_LOGD("granting %u W from DC power bus (keep-at-SoC above target)",
+                powerRequested);
+        return powerRequested;
+    }
+
+    if (isFullSolarPassthroughActive() && passthroughAc > powerRequested) {
+        DTU_LOGD("using %u W AC from DC power bus (full solar-passthrough), "
+                "solar charger is %u/%u W DC/AC, battery solar input is %u W AC",
+                passthroughAc, solarOutputDc, solarOutputAc, batterySolarInputAc);
+
+        return static_cast<uint16_t>(std::min<uint32_t>(
+                passthroughAc, std::numeric_limits<uint16_t>::max()));
     }
 
     auto oBatteryDischargeLimit = getBatteryDischargeLimit();
     if (!oBatteryDischargeLimit) {
         DTU_LOGD("granting %d W from DC power bus (no battery discharge "
-                "limit), solar power is %u/%u W DC/AC",
-                powerRequested, solarOutputDc, solarOutputAc);
+                "limit), solar power is %u/%u W DC/AC, battery solar input is %u W AC",
+                powerRequested, solarOutputDc, solarOutputAc, batterySolarInputAc);
         return powerRequested;
     }
 
     auto batteryAllowanceAc = dcPowerBusToInverterAc(*oBatteryDischargeLimit);
 
     DTU_LOGD("battery allowance is %u/%u W DC/AC, solar power is %u/%u W DC/AC, "
-            "requested are %u W AC",
+            "battery solar input is %u W AC, requested are %u W AC",
             *oBatteryDischargeLimit, batteryAllowanceAc,
-            solarOutputDc, solarOutputAc, powerRequested);
+            solarOutputDc, solarOutputAc, batterySolarInputAc, powerRequested);
 
-    uint16_t allowance = batteryAllowanceAc + solarOutputAc;
-    return std::min(powerRequested, allowance);
+    uint32_t allowance = static_cast<uint32_t>(batteryAllowanceAc) + solarOutputAc + batterySolarInputAc;
+    return static_cast<uint16_t>(std::min<uint32_t>(powerRequested, allowance));
 }
 
 bool PowerLimiterClass::updateInverters()
@@ -813,6 +891,57 @@ uint16_t PowerLimiterClass::getSolarPassthroughPower() const
     return std::max<float>(0, oSolarChargerOutput.value_or(0));
 }
 
+uint16_t PowerLimiterClass::getBatterySolarInputPassthroughPower() const
+{
+    auto const& config = Configuration.get();
+
+    if (!config.Battery.Enabled || !config.Battery.KeepAtSocEnabled || !usesStorageBackedInverter()) {
+        return 0;
+    }
+
+    auto stats = Battery.getStats();
+    auto solarInputPower = stats->getSolarInputPowerWatts();
+    if (!stats->isSoCValid()
+            || stats->isSoCStale()
+            || !solarInputPower.has_value()
+            || stats->isSolarInputPowerStale()
+            || stats->getSoC() < config.Battery.KeepAtSoc) {
+        return 0;
+    }
+
+    return static_cast<uint16_t>(std::round(std::max<float>(0, *solarInputPower)));
+}
+
+uint16_t PowerLimiterClass::getStorageBackedInvertersConfiguredMaxPowerWatts() const
+{
+    uint32_t maxOutput = 0;
+
+    for (auto const& upInv : _inverters) {
+        if ((!upInv->isBatteryPowered() && !upInv->isSmartBufferPowered()) || !upInv->isEligible()) { continue; }
+        maxOutput += upInv->getConfiguredMaxPowerWatts();
+    }
+
+    return static_cast<uint16_t>(std::min<uint32_t>(
+            maxOutput, std::numeric_limits<uint16_t>::max()));
+}
+
+bool PowerLimiterClass::isBatteryKeepAtSocForceDischargeActive() const
+{
+    auto const& config = Configuration.get();
+
+    if (!config.Battery.Enabled || !config.Battery.KeepAtSocEnabled || !usesStorageBackedInverter()) {
+        return false;
+    }
+
+    auto stats = Battery.getStats();
+    if (!stats->isSoCValid()
+            || stats->isSoCStale()) {
+        return false;
+    }
+
+    return stats->getSoC() > config.Battery.KeepAtSoc;
+}
+
 float PowerLimiterClass::getBatteryInvertersOutputAcWatts() const
 {
     float res = 0;
@@ -847,6 +976,24 @@ std::optional<uint16_t> PowerLimiterClass::getBatteryDischargeLimit() const
     }
 
     return inverter.first * currentLimit;
+}
+
+bool PowerLimiterClass::isLowCellVoltageProtectionActive() const
+{
+    auto const& config = Configuration.get();
+
+    if (!config.Battery.Enabled || !config.Battery.LowCellVoltageProtectionEnabled) {
+        return false;
+    }
+
+    auto stats = Battery.getStats();
+    auto lowestCellVoltage = stats->getLowestCellVoltage();
+
+    if (!lowestCellVoltage.has_value() || stats->isLowestCellVoltageStale()) {
+        return false;
+    }
+
+    return *lowestCellVoltage <= config.Battery.LowCellVoltageThreshold;
 }
 
 bool PowerLimiterClass::testThreshold(float socThreshold, float voltThreshold,
@@ -972,6 +1119,11 @@ bool PowerLimiterClass::usesSmartBufferPoweredInverter() const
     }
 
     return false;
+}
+
+bool PowerLimiterClass::usesStorageBackedInverter() const
+{
+    return usesBatteryPoweredInverter() || usesSmartBufferPoweredInverter();
 }
 
 bool PowerLimiterClass::isGovernedBatteryPoweredInverterProducing() const

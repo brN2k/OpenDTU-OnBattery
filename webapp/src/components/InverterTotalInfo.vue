@@ -103,36 +103,57 @@
             </CardElement>
         </div>
         <template v-if="totalBattData.enabled">
-            <div class="col">
+            <div class="col" v-if="totalBattData.soc">
                 <CardElement
                     centerContent
-                    flexChildren
-                    textVariant="text-bg-primary"
-                    :text="$t('invertertotalinfo.BatteryCharge')"
+                    :textVariant="totalBattData.soc.stale ? 'text-bg-warning text-dark' : 'text-bg-primary'"
+                    :text="$t('invertertotalinfo.BatterySoc')"
                 >
-                    <div class="flex-fill" v-if="totalBattData.soc">
-                        <h2 class="mb-0">
-                            {{
-                                $n(totalBattData.soc.v, 'decimal', {
-                                    minimumFractionDigits: totalBattData.soc.d,
-                                    maximumFractionDigits: totalBattData.soc.d,
-                                })
-                            }}
-                            <small class="text-muted">{{ totalBattData.soc.u }}</small>
-                        </h2>
-                    </div>
-
-                    <div class="flex-fill" v-if="totalBattData.voltage">
-                        <h2 class="mb-0">
-                            {{
-                                $n(totalBattData.voltage.v, 'decimal', {
-                                    minimumFractionDigits: totalBattData.voltage.d,
-                                    maximumFractionDigits: totalBattData.voltage.d,
-                                })
-                            }}
-                            <small class="text-muted">{{ totalBattData.voltage.u }}</small>
-                        </h2>
-                    </div>
+                    <h2>
+                        {{
+                            $n(totalBattData.soc.v, 'decimal', {
+                                minimumFractionDigits: totalBattData.soc.d,
+                                maximumFractionDigits: totalBattData.soc.d,
+                            })
+                        }}
+                        <small class="text-muted">{{ totalBattData.soc.u }}</small>
+                    </h2>
+                </CardElement>
+            </div>
+            <div class="col" v-if="totalBattData.solarInputPower">
+                <CardElement
+                    centerContent
+                    :textVariant="
+                        totalBattData.solarInputPower.stale ? 'text-bg-warning text-dark' : 'text-bg-primary'
+                    "
+                    :text="$t('invertertotalinfo.BatterySolarInput')"
+                >
+                    <h2>
+                        {{
+                            $n(totalBattData.solarInputPower.v, 'decimal', {
+                                minimumFractionDigits: totalBattData.solarInputPower.d,
+                                maximumFractionDigits: totalBattData.solarInputPower.d,
+                            })
+                        }}
+                        <small class="text-muted">{{ totalBattData.solarInputPower.u }}</small>
+                    </h2>
+                </CardElement>
+            </div>
+            <div class="col" v-if="totalBattData.voltage">
+                <CardElement
+                    centerContent
+                    textVariant="text-bg-primary"
+                    :text="$t('invertertotalinfo.BatteryVoltage')"
+                >
+                    <h2>
+                        {{
+                            $n(totalBattData.voltage.v, 'decimal', {
+                                minimumFractionDigits: totalBattData.voltage.d,
+                                maximumFractionDigits: totalBattData.voltage.d,
+                            })
+                        }}
+                        <small class="text-muted">{{ totalBattData.voltage.u }}</small>
+                    </h2>
                 </CardElement>
             </div>
             <div class="col" v-if="totalBattData.power || totalBattData.current">

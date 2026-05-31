@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <AsyncJson.h>
 #include <cfloat>
+#include <optional>
 #include <string>
 
 namespace Batteries {
@@ -17,11 +18,12 @@ public:
 
     // the last time *any* data was updated
     uint32_t getAgeSeconds() const { return (millis() - _lastUpdate) / 1000; }
-    bool updateAvailable(uint32_t since) const;
+    virtual bool updateAvailable(uint32_t since) const;
 
     float getSoC() const { return _soc; }
     uint32_t getSoCAgeSeconds() const { return (millis() - _lastUpdateSoC) / 1000; }
     uint8_t getSoCPrecision() const { return _socPrecision; }
+    virtual bool isSoCStale() const { return false; }
 
     float getVoltage() const { return _voltage; }
     uint32_t getVoltageAgeSeconds() const { return (millis() - _lastUpdateVoltage) / 1000; }
@@ -65,6 +67,12 @@ public:
     virtual bool getImmediateChargingRequest() const { return false; };
 
     virtual bool supportsAlarmsAndWarnings() const { return true; };
+
+    virtual std::optional<float> getSolarInputPowerWatts() const { return std::nullopt; }
+    virtual bool isSolarInputPowerStale() const { return false; }
+
+    virtual std::optional<float> getLowestCellVoltage() const { return std::nullopt; }
+    virtual bool isLowestCellVoltageStale() const { return false; }
 
 protected:
     virtual void mqttPublish() const;
@@ -164,6 +172,12 @@ protected:
         std::string const& text)
     {
         addLiveViewTextInSection(root, "status", name, text);
+    }
+
+    static void addLiveViewStale(JsonVariant& root,
+        std::string const& section, std::string const& name, bool stale)
+    {
+        root["values"][section][name]["stale"] = stale;
     }
 
     static void addLiveViewWarning(JsonVariant& root, std::string const& name,
