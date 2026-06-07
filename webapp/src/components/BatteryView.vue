@@ -68,7 +68,9 @@
                                                         v-for="(prop, key) in values"
                                                         v-bind:key="key"
                                                         :class="{
-                                                            'table-warning': !isStringValue(prop) && prop.stale,
+                                                            'table-danger': !isStringValue(prop) && prop.error,
+                                                            'table-warning':
+                                                                !isStringValue(prop) && prop.stale && !prop.error,
                                                         }"
                                                     >
                                                         <th scope="row">{{ $t('battery.' + key) }}</th>

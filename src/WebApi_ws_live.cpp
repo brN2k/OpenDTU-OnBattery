@@ -138,8 +138,10 @@ void WebApiWsLiveClass::generateOnBatteryJsonResponse(JsonVariant& root, bool al
 
         if (config.Battery.Enabled) {
             if (spStats->isSoCValid()) {
+                auto const socStatus = spStats->getSoCDataStatus();
                 addTotalField(batteryObj, "soc", spStats->getSoC(), "%", spStats->getSoCPrecision(),
-                        spStats->isSoCStale());
+                        Batteries::DataStatus::Ok != socStatus,
+                        Batteries::DataStatus::Error == socStatus);
             }
 
             if (spStats->isVoltageValid()) {
@@ -156,8 +158,10 @@ void WebApiWsLiveClass::generateOnBatteryJsonResponse(JsonVariant& root, bool al
 
             auto solarInputPower = spStats->getSolarInputPowerWatts();
             if (solarInputPower.has_value()) {
+                auto const solarInputPowerStatus = spStats->getSolarInputPowerDataStatus();
                 addTotalField(batteryObj, "solarInputPower", *solarInputPower, "W", 1,
-                        spStats->isSolarInputPowerStale());
+                        Batteries::DataStatus::Ok != solarInputPowerStatus,
+                        Batteries::DataStatus::Error == solarInputPowerStatus);
             }
         }
 
@@ -355,12 +359,13 @@ void WebApiWsLiveClass::addField(JsonObject& root, std::shared_ptr<InverterAbstr
     }
 }
 
-void WebApiWsLiveClass::addTotalField(JsonObject& root, const String& name, const float value, const String& unit, const uint8_t digits, bool stale)
+void WebApiWsLiveClass::addTotalField(JsonObject& root, const String& name, const float value, const String& unit, const uint8_t digits, bool stale, bool error)
 {
     root[name]["v"] = value;
     root[name]["u"] = unit;
     root[name]["d"] = digits;
-    if (stale) { root[name]["stale"] = true; }
+    if (stale || error) { root[name]["stale"] = true; }
+    if (error) { root[name]["error"] = true; }
 }
 
 void WebApiWsLiveClass::onWebsocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len)

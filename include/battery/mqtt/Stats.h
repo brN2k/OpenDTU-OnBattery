@@ -12,6 +12,7 @@ public:
     bool updateAvailable(uint32_t since) const final;
 
     void getLiveViewData(JsonVariant& root) const final;
+    void refreshActiveValues();
 
     // since the source of information was MQTT in the first place,
     // we do NOT publish the same data under a different topic.
@@ -21,31 +22,69 @@ public:
 
     std::optional<float> getSolarInputPowerWatts() const final;
     bool isSolarInputPowerStale() const final;
+    DataStatus getSolarInputPowerDataStatus() const final;
 
     std::optional<float> getLowestCellVoltage() const final;
     bool isLowestCellVoltageStale() const final;
+    DataStatus getLowestCellVoltageDataStatus() const final;
 
     bool isSoCStale() const final;
+    DataStatus getSoCDataStatus() const final;
 
 private:
-    void setSolarInputPowerWatts(float power, uint32_t timestamp) {
-        _solarInputPowerWatts = power;
-        _lastUpdateSolarInputPowerWatts = _lastUpdate = timestamp;
+    enum class Source : uint8_t {
+        None,
+        Primary,
+        Backup,
+    };
+
+    struct SourceValue {
+        float Value = 0;
+        uint8_t Precision = 0;
+        uint32_t LastUpdate = 0;
+    };
+
+    void setPrimarySoC(float soc, uint8_t precision, uint32_t timestamp) {
+        _primarySoC = { soc, precision, timestamp };
+        refreshActiveSoC();
     }
 
-    void setLowestCellVoltage(float voltage, uint32_t timestamp) {
-        _lowestCellVoltage = voltage;
-        _lastUpdateLowestCellVoltage = _lastUpdate = timestamp;
+    void setBackupSoC(float soc, uint8_t precision, uint32_t timestamp) {
+        _backupSoC = { soc, precision, timestamp };
+        refreshActiveSoC();
     }
 
-    bool isTimedOut(uint32_t lastUpdate) const;
-    std::optional<float> getValueIfAvailable(uint32_t lastUpdate, float value) const;
+    void setSolarInputPowerWatts(float power, uint32_t timestamp, bool backup) {
+        auto& source = backup ? _backupSolarInputPowerWatts : _primarySolarInputPowerWatts;
+        source = { power, 1, timestamp };
+        _lastUpdate = timestamp;
+    }
 
-    float _solarInputPowerWatts = 0;
-    uint32_t _lastUpdateSolarInputPowerWatts = 0;
+    void setLowestCellVoltage(float voltage, uint32_t timestamp, bool backup) {
+        auto& source = backup ? _backupLowestCellVoltage : _primaryLowestCellVoltage;
+        source = { voltage, 3, timestamp };
+        _lastUpdate = timestamp;
+    }
 
-    float _lowestCellVoltage = 0;
-    uint32_t _lastUpdateLowestCellVoltage = 0;
+    void refreshActiveSoC();
+    bool isFresh(uint32_t lastUpdate) const;
+    DataStatus getDataStatus(uint32_t primaryLastUpdate,
+            uint32_t backupLastUpdate, char const* backupTopic) const;
+    std::optional<float> getValue(SourceValue const& primary,
+            SourceValue const& backup, char const* backupTopic) const;
+    Source getSelectedSource(SourceValue const& primary,
+            SourceValue const& backup, char const* backupTopic) const;
+
+    SourceValue _primarySoC;
+    SourceValue _backupSoC;
+    Source _activeSoCSource = Source::None;
+    uint32_t _activeSoCLastUpdate = 0;
+
+    SourceValue _primarySolarInputPowerWatts;
+    SourceValue _backupSolarInputPowerWatts;
+
+    SourceValue _primaryLowestCellVoltage;
+    SourceValue _backupLowestCellVoltage;
 };
 
 } // namespace Batteries::Mqtt

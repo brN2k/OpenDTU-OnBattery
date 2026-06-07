@@ -4,6 +4,7 @@ export interface ValueObject {
     d: number; // digits
     max?: number;
     stale?: boolean;
+    error?: boolean;
 }
 
 export interface InverterStatistics {

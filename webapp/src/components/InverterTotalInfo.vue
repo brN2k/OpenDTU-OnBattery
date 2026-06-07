@@ -106,7 +106,7 @@
             <div class="col" v-if="totalBattData.soc">
                 <CardElement
                     centerContent
-                    :textVariant="totalBattData.soc.stale ? 'text-bg-warning text-dark' : 'text-bg-primary'"
+                    :textVariant="batteryValueVariant(totalBattData.soc)"
                     :text="$t('invertertotalinfo.BatterySoc')"
                 >
                     <h2>
@@ -123,9 +123,7 @@
             <div class="col" v-if="totalBattData.solarInputPower">
                 <CardElement
                     centerContent
-                    :textVariant="
-                        totalBattData.solarInputPower.stale ? 'text-bg-warning text-dark' : 'text-bg-primary'
-                    "
+                    :textVariant="batteryValueVariant(totalBattData.solarInputPower)"
                     :text="$t('invertertotalinfo.BatterySolarInput')"
                 >
                     <h2>
@@ -247,6 +245,19 @@ export default defineComponent({
     },
     mounted() {
         this.noTotals = this.totalsContainer?.children.length === 0 || false;
+    },
+    methods: {
+        batteryValueVariant(value: { stale?: boolean; error?: boolean }) {
+            if (value.error) {
+                return 'text-bg-danger';
+            }
+
+            if (value.stale) {
+                return 'text-bg-warning text-dark';
+            }
+
+            return 'text-bg-primary';
+        },
     },
 });
 </script>

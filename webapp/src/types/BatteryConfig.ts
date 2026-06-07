@@ -31,6 +31,8 @@ export interface BatteryZendureConfig {
 export interface BatteryMqttConfig {
     soc_topic: string;
     soc_json_path: string;
+    soc_backup_topic: string;
+    soc_backup_json_path: string;
     voltage_topic: string;
     voltage_json_path: string;
     voltage_unit: number;
@@ -45,8 +47,12 @@ export interface BatteryMqttConfig {
     charge_current_limit_unit: number;
     solar_input_power_topic: string;
     solar_input_power_json_path: string;
+    solar_input_power_backup_topic: string;
+    solar_input_power_backup_json_path: string;
     lowest_cell_voltage_topic: string;
     lowest_cell_voltage_json_path: string;
+    lowest_cell_voltage_backup_topic: string;
+    lowest_cell_voltage_backup_json_path: string;
     topic_timeout: number;
 }
 
@@ -76,4 +82,7 @@ export interface BatteryConfig {
     keep_at_soc: number;
     low_cell_voltage_protection_enabled: boolean;
     low_cell_voltage_threshold: number;
+    low_cell_voltage_protection_mode: number;
+    low_cell_voltage_recovery_margin: number;
+    low_cell_voltage_solar_hold_efficiency: number;
 }

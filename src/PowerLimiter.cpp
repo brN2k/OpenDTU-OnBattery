@@ -389,10 +389,25 @@ void PowerLimiterClass::loop()
     auto totalAllowance = config.PowerLimiter.TotalUpperPowerLimit;
     inverterTotalPower = std::min(inverterTotalPower, totalAllowance);
 
+    auto lowCellVoltageProtectionAction = getLowCellVoltageProtectionAction();
     auto coveredBySolar = updateInverterLimits(inverterTotalPower, sSolarPoweredFilter, sSolarPoweredExpression);
-    auto remainingAfterSolar = (inverterTotalPower >= coveredBySolar) ? inverterTotalPower - coveredBySolar : 0;
+    uint16_t remainingAfterSolar = (inverterTotalPower >= coveredBySolar) ? inverterTotalPower - coveredBySolar : 0;
+
+    if (lowCellVoltageProtectionAction == LowCellVoltageProtectionAction::Cutoff) {
+        remainingAfterSolar = 0;
+    } else if (lowCellVoltageProtectionAction == LowCellVoltageProtectionAction::SolarHold) {
+        auto solarHoldLimit = getLowCellVoltageSolarHoldLimit();
+        if (solarHoldLimit < remainingAfterSolar) {
+            DTU_LOGD("low cell voltage protection active, limiting storage-backed output to %u W "
+                    "from battery solar input at %u %% efficiency",
+                    solarHoldLimit, config.Battery.LowCellVoltageSolarHoldEfficiency);
+        }
+
+        remainingAfterSolar = std::min(remainingAfterSolar, solarHoldLimit);
+    }
+
     auto coveredBySmartBuffer = updateInverterLimits(remainingAfterSolar, sSmartBufferPoweredFilter, sSmartBufferPoweredExpression);
-    auto remainingAfterSmartBuffer = (remainingAfterSolar >= coveredBySmartBuffer) ? remainingAfterSolar - coveredBySmartBuffer : 0;
+    uint16_t remainingAfterSmartBuffer = (remainingAfterSolar >= coveredBySmartBuffer) ? remainingAfterSolar - coveredBySmartBuffer : 0;
     auto powerBusUsage = calcPowerBusUsage(remainingAfterSmartBuffer);
     auto coveredByBattery = updateInverterLimits(powerBusUsage, sBatteryPoweredFilter, sBatteryPoweredExpression);
 
@@ -677,6 +692,7 @@ uint16_t PowerLimiterClass::updateInverterLimits(uint16_t powerRequested,
 {
     std::vector<PowerLimiterInverter*> matchingInverters;
     uint16_t producing = 0; // sum of AC power the matching inverters produce now
+    uint32_t configuredMaxPower = 0;
 
     for (auto& upInv : _inverters) {
         if (!filter(*upInv)) { continue; }
@@ -684,27 +700,32 @@ uint16_t PowerLimiterClass::updateInverterLimits(uint16_t powerRequested,
         if (!upInv->isEligible()) { continue; }
 
         producing += upInv->getCurrentOutputAcWatts();
+        configuredMaxPower += upInv->getConfiguredMaxPowerWatts();
         matchingInverters.push_back(upInv.get());
     }
 
     if (matchingInverters.empty()) { return 0; }
+
+    auto lowCellVoltageProtectionAction = getLowCellVoltageProtectionAction();
+    bool const isStorageBacked = matchingInverters[0]->isBatteryPowered()
+            || matchingInverters[0]->isSmartBufferPowered();
+
+    if (isStorageBacked && lowCellVoltageProtectionAction == LowCellVoltageProtectionAction::Cutoff) {
+        for (auto pInv : matchingInverters) { pInv->standby(); }
+        DTU_LOGD("low cell voltage protection active, all storage-backed inverters are put into standby.");
+        return 0;
+    }
 
     // if we update battery-powered inverters and the battery is in the STOP state,
     // we must put all battery-powered inverters into standby mode,
     // regardless of whether the standby option is enabled or not.
     if ((matchingInverters[0]->isBatteryPowered())
             && (_batteryState == BatteryState::STOP)
+            && lowCellVoltageProtectionAction != LowCellVoltageProtectionAction::SolarHold
             && !isBatteryKeepAtSocForceDischargeActive()
             && getBatterySolarInputPassthroughPower() == 0) {
         for (auto pInv : matchingInverters) { pInv->standby(); }
         DTU_LOGD("battery is in STOP state, all battery-powered inverters are put into standby.");
-        return 0;
-    }
-
-    if ((matchingInverters[0]->isBatteryPowered() || matchingInverters[0]->isSmartBufferPowered())
-            && isLowCellVoltageProtectionActive()) {
-        for (auto pInv : matchingInverters) { pInv->standby(); }
-        DTU_LOGD("low cell voltage protection active, all storage-backed inverters are put into standby.");
         return 0;
     }
 
@@ -719,11 +740,38 @@ uint16_t PowerLimiterClass::updateInverterLimits(uint16_t powerRequested,
             powerRequested, matchingInverters.size(), filterExpression.c_str(),
             (plural?"s":""), producing, diff, hysteresis);
 
-    // if 0 W are requested, we set hysteresis to 0 to basically ignore it
-    // which allows battery-powered inverters to go into standby and avoid
-    // that the battery gets fully discharged.
-    if (powerRequested == 0) {
+    // if 0 W are requested, or if we are actively holding the lowest cell voltage
+    // using battery solar input, we bypass hysteresis and apply the limit directly.
+    if (powerRequested == 0
+            || (isStorageBacked && lowCellVoltageProtectionAction == LowCellVoltageProtectionAction::SolarHold)) {
         hysteresis = 0;
+    }
+
+    bool const isConfiguredMaxRequested = configuredMaxPower > 0
+            && powerRequested >= std::min<uint32_t>(
+                    configuredMaxPower, std::numeric_limits<uint16_t>::max());
+
+    if (isConfiguredMaxRequested && diff > 0) {
+        uint16_t covered = 0;
+        bool maxLimitAssigned = false;
+
+        for (auto pInv : matchingInverters) {
+            if (pInv->getMaxIncreaseWatts() > 0) {
+                pInv->setMaxOutput();
+                maxLimitAssigned = true;
+            }
+
+            covered += pInv->getExpectedOutputAcWatts();
+        }
+
+        if (maxLimitAssigned) {
+            DTU_LOGD("max output requested, bypassing hysteresis for %d %s inverter%s",
+                    matchingInverters.size(), filterExpression.c_str(), (plural?"s":""));
+            DTU_LOGD("will cover %d W using %d %s inverter%s",
+                    covered, matchingInverters.size(),
+                    filterExpression.c_str(), (plural?"s":""));
+            return covered;
+        }
     }
 
     if (std::abs(diff) < static_cast<int32_t>(hysteresis)) { return producing; }
@@ -786,9 +834,20 @@ uint16_t PowerLimiterClass::updateInverterLimits(uint16_t powerRequested,
 // solar charge controller(s), possibly an AC charger, as well as the battery.
 uint16_t PowerLimiterClass::calcPowerBusUsage(uint16_t powerRequested) const
 {
-    if (isLowCellVoltageProtectionActive()) {
+    auto lowCellVoltageProtectionAction = getLowCellVoltageProtectionAction();
+
+    if (lowCellVoltageProtectionAction == LowCellVoltageProtectionAction::Cutoff) {
         DTU_LOGD("DC power bus usage blocked by low cell voltage protection");
         return 0;
+    }
+
+    if (lowCellVoltageProtectionAction == LowCellVoltageProtectionAction::SolarHold) {
+        auto solarHoldLimit = getLowCellVoltageSolarHoldLimit();
+        auto granted = std::min(powerRequested, solarHoldLimit);
+        DTU_LOGD("granting %u W from DC power bus (low cell voltage solar-hold, "
+                "limit is %u W)",
+                granted, solarHoldLimit);
+        return granted;
     }
 
     auto keepAtSocForceDischarge = isBatteryKeepAtSocForceDischargeActive();
@@ -957,6 +1016,67 @@ float PowerLimiterClass::getBatteryInvertersOutputAcWatts() const
     return res;
 }
 
+PowerLimiterClass::LowCellVoltageProtectionAction PowerLimiterClass::getLowCellVoltageProtectionAction() const
+{
+    auto const& config = Configuration.get();
+
+    if (!config.Battery.Enabled || !config.Battery.LowCellVoltageProtectionEnabled) {
+        _lowCellVoltageProtectionLatched = false;
+        return LowCellVoltageProtectionAction::None;
+    }
+
+    auto stats = Battery.getStats();
+    auto lowestCellVoltage = stats->getLowestCellVoltage();
+
+    if (!lowestCellVoltage.has_value() || stats->isLowestCellVoltageStale()) {
+        _lowCellVoltageProtectionLatched = false;
+        return LowCellVoltageProtectionAction::None;
+    }
+
+    if (!_lowCellVoltageProtectionLatched && *lowestCellVoltage <= config.Battery.LowCellVoltageThreshold) {
+        _lowCellVoltageProtectionLatched = true;
+    } else if (_lowCellVoltageProtectionLatched
+            && *lowestCellVoltage > config.Battery.LowCellVoltageThreshold + config.Battery.LowCellVoltageRecoveryMargin) {
+        _lowCellVoltageProtectionLatched = false;
+    }
+
+    if (!_lowCellVoltageProtectionLatched) {
+        return LowCellVoltageProtectionAction::None;
+    }
+
+    if (config.Battery.LowCellVoltageProtectionMode == BatteryLowCellVoltageProtectionMode::SolarHold) {
+        auto solarInputPower = stats->getSolarInputPowerWatts();
+        if (solarInputPower.has_value() && !stats->isSolarInputPowerStale()) {
+            return LowCellVoltageProtectionAction::SolarHold;
+        }
+    }
+
+    return LowCellVoltageProtectionAction::Cutoff;
+}
+
+uint16_t PowerLimiterClass::getLowCellVoltageSolarHoldLimit() const
+{
+    auto stats = Battery.getStats();
+    auto solarInputPower = stats->getSolarInputPowerWatts();
+
+    if (!solarInputPower.has_value() || stats->isSolarInputPowerStale()) {
+        return 0;
+    }
+
+    auto const& config = Configuration.get();
+    auto efficiency = std::min<uint8_t>(config.Battery.LowCellVoltageSolarHoldEfficiency, 100);
+    auto limit = static_cast<uint32_t>(std::round(
+            std::max<float>(0, *solarInputPower) * efficiency / 100.0f));
+
+    return static_cast<uint16_t>(std::min<uint32_t>(
+            limit, std::numeric_limits<uint16_t>::max()));
+}
+
+bool PowerLimiterClass::isLowCellVoltageProtectionActive() const
+{
+    return getLowCellVoltageProtectionAction() != LowCellVoltageProtectionAction::None;
+}
+
 std::optional<uint16_t> PowerLimiterClass::getBatteryDischargeLimit() const
 {
     if ((_batteryState == BatteryState::STOP) || (_batteryState == BatteryState::NO_DISCHARGE)) { return 0; }
@@ -976,24 +1096,6 @@ std::optional<uint16_t> PowerLimiterClass::getBatteryDischargeLimit() const
     }
 
     return inverter.first * currentLimit;
-}
-
-bool PowerLimiterClass::isLowCellVoltageProtectionActive() const
-{
-    auto const& config = Configuration.get();
-
-    if (!config.Battery.Enabled || !config.Battery.LowCellVoltageProtectionEnabled) {
-        return false;
-    }
-
-    auto stats = Battery.getStats();
-    auto lowestCellVoltage = stats->getLowestCellVoltage();
-
-    if (!lowestCellVoltage.has_value() || stats->isLowestCellVoltageStale()) {
-        return false;
-    }
-
-    return *lowestCellVoltage <= config.Battery.LowCellVoltageThreshold;
 }
 
 bool PowerLimiterClass::testThreshold(float socThreshold, float voltThreshold,

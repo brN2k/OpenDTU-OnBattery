@@ -10,7 +10,7 @@
 
 #define CONFIG_FILENAME "/config.json"
 #define CONFIG_VERSION 0x00011e00 // 0.1.30 // make sure to clean all after change
-#define CONFIG_VERSION_ONBATTERY 9
+#define CONFIG_VERSION_ONBATTERY 11
 
 #define WIFI_MAX_SSID_STRLEN 32
 #define WIFI_MAX_PASSWORD_STRLEN 64
@@ -226,6 +226,8 @@ enum BatteryAmperageUnit { Amps = 0, MilliAmps = 1 };
 struct BATTERY_MQTT_CONFIG_T {
     char SocTopic[MQTT_MAX_TOPIC_STRLEN + 1];
     char SocJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
+    char SocBackupTopic[MQTT_MAX_TOPIC_STRLEN + 1];
+    char SocBackupJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
     char VoltageTopic[MQTT_MAX_TOPIC_STRLEN + 1];
     char VoltageJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
     BatteryVoltageUnit VoltageUnit;
@@ -240,8 +242,12 @@ struct BATTERY_MQTT_CONFIG_T {
     BatteryAmperageUnit ChargeCurrentLimitUnit;
     char SolarInputPowerTopic[MQTT_MAX_TOPIC_STRLEN + 1];
     char SolarInputPowerJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
+    char SolarInputPowerBackupTopic[MQTT_MAX_TOPIC_STRLEN + 1];
+    char SolarInputPowerBackupJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
     char LowestCellVoltageTopic[MQTT_MAX_TOPIC_STRLEN + 1];
     char LowestCellVoltageJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
+    char LowestCellVoltageBackupTopic[MQTT_MAX_TOPIC_STRLEN + 1];
+    char LowestCellVoltageBackupJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
     uint16_t TopicTimeout;
 };
 using BatteryMqttConfig = struct BATTERY_MQTT_CONFIG_T;
@@ -251,6 +257,11 @@ struct BATTERY_SERIAL_CONFIG_T {
     uint8_t PollingInterval;
 };
 using BatterySerialConfig = struct BATTERY_SERIAL_CONFIG_T;
+
+enum class BatteryLowCellVoltageProtectionMode : uint8_t {
+    Cutoff = 0,
+    SolarHold = 1,
+};
 
 struct BATTERY_CONFIG_T {
     bool Enabled;
@@ -273,6 +284,9 @@ struct BATTERY_CONFIG_T {
     uint8_t KeepAtSoc;
     bool LowCellVoltageProtectionEnabled;
     float LowCellVoltageThreshold;
+    BatteryLowCellVoltageProtectionMode LowCellVoltageProtectionMode;
+    float LowCellVoltageRecoveryMargin;
+    uint8_t LowCellVoltageSolarHoldEfficiency;
 };
 using BatteryConfig = struct BATTERY_CONFIG_T;
 

@@ -23,10 +23,22 @@ bool Provider::init()
                 std::bind(&Provider::onMqttMessageSoC,
                     this, std::placeholders::_1, std::placeholders::_2,
                     std::placeholders::_3, std::placeholders::_4,
-                    config.Battery.Mqtt.SocJsonPath)
+                    config.Battery.Mqtt.SocJsonPath, false)
                 );
 
         DTU_LOGD("Subscribed to '%s' for SoC readings", _socTopic.c_str());
+    }
+
+    _socBackupTopic = config.Battery.Mqtt.SocBackupTopic;
+    if (!_socBackupTopic.isEmpty()) {
+        MqttSettings.subscribe(_socBackupTopic, 0/*QoS*/,
+                std::bind(&Provider::onMqttMessageSoC,
+                    this, std::placeholders::_1, std::placeholders::_2,
+                    std::placeholders::_3, std::placeholders::_4,
+                    config.Battery.Mqtt.SocBackupJsonPath, true)
+                );
+
+        DTU_LOGD("Subscribed to '%s' for backup SoC readings", _socBackupTopic.c_str());
     }
 
     _voltageTopic = config.Battery.Mqtt.VoltageTopic;
@@ -91,11 +103,24 @@ bool Provider::init()
                 std::bind(&Provider::onMqttMessageSolarInputPower,
                     this, std::placeholders::_1, std::placeholders::_2,
                     std::placeholders::_3, std::placeholders::_4,
-                    config.Battery.Mqtt.SolarInputPowerJsonPath)
+                    config.Battery.Mqtt.SolarInputPowerJsonPath, false)
                 );
 
         DTU_LOGD("Subscribed to '%s' for solar input power readings",
             _solarInputPowerTopic.c_str());
+    }
+
+    _solarInputPowerBackupTopic = config.Battery.Mqtt.SolarInputPowerBackupTopic;
+    if (!_solarInputPowerBackupTopic.isEmpty()) {
+        MqttSettings.subscribe(_solarInputPowerBackupTopic, 0/*QoS*/,
+                std::bind(&Provider::onMqttMessageSolarInputPower,
+                    this, std::placeholders::_1, std::placeholders::_2,
+                    std::placeholders::_3, std::placeholders::_4,
+                    config.Battery.Mqtt.SolarInputPowerBackupJsonPath, true)
+                );
+
+        DTU_LOGD("Subscribed to '%s' for backup solar input power readings",
+            _solarInputPowerBackupTopic.c_str());
     }
 
     _lowestCellVoltageTopic = config.Battery.Mqtt.LowestCellVoltageTopic;
@@ -104,11 +129,24 @@ bool Provider::init()
                 std::bind(&Provider::onMqttMessageLowestCellVoltage,
                     this, std::placeholders::_1, std::placeholders::_2,
                     std::placeholders::_3, std::placeholders::_4,
-                    config.Battery.Mqtt.LowestCellVoltageJsonPath)
+                    config.Battery.Mqtt.LowestCellVoltageJsonPath, false)
                 );
 
         DTU_LOGD("Subscribed to '%s' for lowest cell voltage readings",
             _lowestCellVoltageTopic.c_str());
+    }
+
+    _lowestCellVoltageBackupTopic = config.Battery.Mqtt.LowestCellVoltageBackupTopic;
+    if (!_lowestCellVoltageBackupTopic.isEmpty()) {
+        MqttSettings.subscribe(_lowestCellVoltageBackupTopic, 0/*QoS*/,
+                std::bind(&Provider::onMqttMessageLowestCellVoltage,
+                    this, std::placeholders::_1, std::placeholders::_2,
+                    std::placeholders::_3, std::placeholders::_4,
+                    config.Battery.Mqtt.LowestCellVoltageBackupJsonPath, true)
+                );
+
+        DTU_LOGD("Subscribed to '%s' for backup lowest cell voltage readings",
+            _lowestCellVoltageBackupTopic.c_str());
     }
 
     return true;
@@ -122,6 +160,10 @@ void Provider::deinit()
 
     if (!_socTopic.isEmpty()) {
         MqttSettings.unsubscribe(_socTopic);
+    }
+
+    if (!_socBackupTopic.isEmpty()) {
+        MqttSettings.unsubscribe(_socBackupTopic);
     }
 
     if (!_currentTopic.isEmpty()) {
@@ -140,14 +182,27 @@ void Provider::deinit()
         MqttSettings.unsubscribe(_solarInputPowerTopic);
     }
 
+    if (!_solarInputPowerBackupTopic.isEmpty()) {
+        MqttSettings.unsubscribe(_solarInputPowerBackupTopic);
+    }
+
     if (!_lowestCellVoltageTopic.isEmpty()) {
         MqttSettings.unsubscribe(_lowestCellVoltageTopic);
     }
+
+    if (!_lowestCellVoltageBackupTopic.isEmpty()) {
+        MqttSettings.unsubscribe(_lowestCellVoltageBackupTopic);
+    }
+}
+
+void Provider::loop()
+{
+    _stats->refreshActiveValues();
 }
 
 void Provider::onMqttMessageSoC(espMqttClientTypes::MessageProperties const& properties,
         char const* topic, uint8_t const* payload, size_t len,
-        char const* jsonPath)
+        char const* jsonPath, bool backup)
 {
     auto soc = Utils::getNumericValueFromMqttPayload<float>("MqttBattery",
             std::string(reinterpret_cast<const char*>(payload), len), topic,
@@ -162,9 +217,14 @@ void Provider::onMqttMessageSoC(espMqttClientTypes::MessageProperties const& pro
 
     _socPrecision = std::max(_socPrecision, calculatePrecision(*soc));
 
-    _stats->setSoC(*soc, _socPrecision, millis());
+    if (backup) {
+        _stats->setBackupSoC(*soc, _socPrecision, millis());
+    } else {
+        _stats->setPrimarySoC(*soc, _socPrecision, millis());
+    }
 
-    DTU_LOGD("Updated SoC to %.*f from '%s'", _socPrecision, *soc, topic);
+    DTU_LOGD("Updated %sSoC to %.*f from '%s'",
+            backup ? "backup " : "", _socPrecision, *soc, topic);
 }
 
 void Provider::onMqttMessageVoltage(espMqttClientTypes::MessageProperties const& properties,
@@ -295,7 +355,7 @@ void Provider::onMqttMessageChargeCurrentLimit(espMqttClientTypes::MessageProper
 
 void Provider::onMqttMessageSolarInputPower(espMqttClientTypes::MessageProperties const& properties,
         char const* topic, uint8_t const* payload, size_t len,
-        char const* jsonPath)
+        char const* jsonPath, bool backup)
 {
     auto power = Utils::getNumericValueFromMqttPayload<float>("MqttBattery",
             std::string(reinterpret_cast<const char*>(payload), len), topic,
@@ -308,14 +368,15 @@ void Provider::onMqttMessageSolarInputPower(espMqttClientTypes::MessagePropertie
         return;
     }
 
-    _stats->setSolarInputPowerWatts(*power, millis());
+    _stats->setSolarInputPowerWatts(*power, millis(), backup);
 
-    DTU_LOGD("Updated solar input power to %.1f W from '%s'", *power, topic);
+    DTU_LOGD("Updated %ssolar input power to %.1f W from '%s'",
+            backup ? "backup " : "", *power, topic);
 }
 
 void Provider::onMqttMessageLowestCellVoltage(espMqttClientTypes::MessageProperties const& properties,
         char const* topic, uint8_t const* payload, size_t len,
-        char const* jsonPath)
+        char const* jsonPath, bool backup)
 {
     auto voltage = Utils::getNumericValueFromMqttPayload<float>("MqttBattery",
             std::string(reinterpret_cast<const char*>(payload), len), topic,
@@ -328,9 +389,10 @@ void Provider::onMqttMessageLowestCellVoltage(espMqttClientTypes::MessagePropert
         return;
     }
 
-    _stats->setLowestCellVoltage(*voltage, millis());
+    _stats->setLowestCellVoltage(*voltage, millis(), backup);
 
-    DTU_LOGD("Updated lowest cell voltage to %.3f V from '%s'", *voltage, topic);
+    DTU_LOGD("Updated %slowest cell voltage to %.3f V from '%s'",
+            backup ? "backup " : "", *voltage, topic);
 }
 
 uint8_t Provider::calculatePrecision(float value) {

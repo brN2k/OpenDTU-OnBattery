@@ -87,6 +87,23 @@
                         :tooltip="$t('batteryadmin.MqttJsonPathDescription')"
                         wide
                     />
+
+                    <InputElement
+                        :label="$t('batteryadmin.MqttBackupTopic')"
+                        v-model="batteryConfigList.mqtt.soc_backup_topic"
+                        type="text"
+                        maxlength="256"
+                        wide
+                    />
+
+                    <InputElement
+                        :label="$t('batteryadmin.MqttBackupJsonPath')"
+                        v-model="batteryConfigList.mqtt.soc_backup_json_path"
+                        type="text"
+                        maxlength="256"
+                        :tooltip="$t('batteryadmin.MqttJsonPathDescription')"
+                        wide
+                    />
                 </CardElement>
 
                 <CardElement :text="$t('batteryadmin.MqttVoltageConfiguration')" textVariant="text-bg-primary" addSpace>
@@ -182,6 +199,23 @@
                         :tooltip="$t('batteryadmin.MqttJsonPathDescription')"
                         wide
                     />
+
+                    <InputElement
+                        :label="$t('batteryadmin.MqttBackupTopic')"
+                        v-model="batteryConfigList.mqtt.solar_input_power_backup_topic"
+                        type="text"
+                        maxlength="256"
+                        wide
+                    />
+
+                    <InputElement
+                        :label="$t('batteryadmin.MqttBackupJsonPath')"
+                        v-model="batteryConfigList.mqtt.solar_input_power_backup_json_path"
+                        type="text"
+                        maxlength="256"
+                        :tooltip="$t('batteryadmin.MqttJsonPathDescription')"
+                        wide
+                    />
                 </CardElement>
 
                 <CardElement
@@ -200,6 +234,23 @@
                     <InputElement
                         :label="$t('batteryadmin.MqttJsonPath')"
                         v-model="batteryConfigList.mqtt.lowest_cell_voltage_json_path"
+                        type="text"
+                        maxlength="256"
+                        :tooltip="$t('batteryadmin.MqttJsonPathDescription')"
+                        wide
+                    />
+
+                    <InputElement
+                        :label="$t('batteryadmin.MqttBackupTopic')"
+                        v-model="batteryConfigList.mqtt.lowest_cell_voltage_backup_topic"
+                        type="text"
+                        maxlength="256"
+                        wide
+                    />
+
+                    <InputElement
+                        :label="$t('batteryadmin.MqttBackupJsonPath')"
+                        v-model="batteryConfigList.mqtt.lowest_cell_voltage_backup_json_path"
                         type="text"
                         maxlength="256"
                         :tooltip="$t('batteryadmin.MqttJsonPathDescription')"
@@ -262,6 +313,54 @@
                         max="5"
                         step="0.001"
                         postfix="V"
+                        wide
+                    />
+
+                    <div class="row mb-3" v-if="batteryConfigList.low_cell_voltage_protection_enabled">
+                        <label for="low_cell_voltage_protection_mode" class="col-sm-4 col-form-label">
+                            {{ $t('batteryadmin.LowCellVoltageProtectionMode') }}
+                        </label>
+                        <div class="col-sm-8">
+                            <select
+                                id="low_cell_voltage_protection_mode"
+                                class="form-select"
+                                v-model="batteryConfigList.low_cell_voltage_protection_mode"
+                            >
+                                <option
+                                    v-for="mode in lowCellVoltageProtectionModeList"
+                                    :key="mode.key"
+                                    :value="mode.key"
+                                >
+                                    {{ $t(`batteryadmin.LowCellVoltageProtectionMode` + mode.value) }}
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <InputElement
+                        v-if="batteryConfigList.low_cell_voltage_protection_enabled"
+                        :label="$t('batteryadmin.LowCellVoltageRecoveryMargin')"
+                        v-model="batteryConfigList.low_cell_voltage_recovery_margin"
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="0.001"
+                        postfix="V"
+                        wide
+                    />
+
+                    <InputElement
+                        v-if="
+                            batteryConfigList.low_cell_voltage_protection_enabled &&
+                            batteryConfigList.low_cell_voltage_protection_mode == 1
+                        "
+                        :label="$t('batteryadmin.LowCellVoltageSolarHoldEfficiency')"
+                        v-model="batteryConfigList.low_cell_voltage_solar_hold_efficiency"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        postfix="%"
                         wide
                     />
                 </CardElement>
@@ -999,6 +1098,10 @@ export default defineComponent({
             amperageUnitTypeList: [
                 { key: 1, value: 'mA' },
                 { key: 0, value: 'A' },
+            ],
+            lowCellVoltageProtectionModeList: [
+                { key: 0, value: 'Cutoff' },
+                { key: 1, value: 'SolarHold' },
             ],
             zendureDeviceTypeList: [
                 { key: 0, filter: 0x3, value: 'Hub1200' },

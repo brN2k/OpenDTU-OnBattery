@@ -10,6 +10,12 @@
 
 namespace Batteries {
 
+enum class DataStatus : uint8_t {
+    Ok,
+    Backup,
+    Error,
+};
+
 // mandatory interface for all kinds of batteries
 class Stats {
 public:
@@ -24,6 +30,7 @@ public:
     uint32_t getSoCAgeSeconds() const { return (millis() - _lastUpdateSoC) / 1000; }
     uint8_t getSoCPrecision() const { return _socPrecision; }
     virtual bool isSoCStale() const { return false; }
+    virtual DataStatus getSoCDataStatus() const { return isSoCStale() ? DataStatus::Error : DataStatus::Ok; }
 
     float getVoltage() const { return _voltage; }
     uint32_t getVoltageAgeSeconds() const { return (millis() - _lastUpdateVoltage) / 1000; }
@@ -70,9 +77,11 @@ public:
 
     virtual std::optional<float> getSolarInputPowerWatts() const { return std::nullopt; }
     virtual bool isSolarInputPowerStale() const { return false; }
+    virtual DataStatus getSolarInputPowerDataStatus() const { return isSolarInputPowerStale() ? DataStatus::Error : DataStatus::Ok; }
 
     virtual std::optional<float> getLowestCellVoltage() const { return std::nullopt; }
     virtual bool isLowestCellVoltageStale() const { return false; }
+    virtual DataStatus getLowestCellVoltageDataStatus() const { return isLowestCellVoltageStale() ? DataStatus::Error : DataStatus::Ok; }
 
 protected:
     virtual void mqttPublish() const;
@@ -178,6 +187,17 @@ protected:
         std::string const& section, std::string const& name, bool stale)
     {
         root["values"][section][name]["stale"] = stale;
+    }
+
+    static void addLiveViewDataStatus(JsonVariant& root,
+        std::string const& section, std::string const& name, DataStatus status)
+    {
+        if (DataStatus::Ok == status) { return; }
+
+        root["values"][section][name]["stale"] = true;
+        if (DataStatus::Error == status) {
+            root["values"][section][name]["error"] = true;
+        }
     }
 
     static void addLiveViewWarning(JsonVariant& root, std::string const& name,

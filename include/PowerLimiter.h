@@ -78,10 +78,13 @@ private:
     BatteryState _batteryState = BatteryState::STOP;
     bool _fromStart = false;
     bool _oneStopPerNightDone = false;
+    mutable bool _lowCellVoltageProtectionLatched = false;
 
     std::pair<bool, uint32_t> _nextInverterRestart = { false, 0 };
     bool _fullSolarPassThroughActive = false;
     float _loadCorrectedVoltage = 0.0f;
+
+    enum class LowCellVoltageProtectionAction : uint8_t { None, Cutoff, SolarHold };
 
     frozen::string const& getStatusText(Status status) const;
     void announceStatus(Status status);
@@ -103,6 +106,8 @@ private:
     bool isBatteryKeepAtSocForceDischargeActive() const;
     std::optional<uint16_t> getBatteryDischargeLimit() const;
     float getBatteryInvertersOutputAcWatts() const;
+    LowCellVoltageProtectionAction getLowCellVoltageProtectionAction() const;
+    uint16_t getLowCellVoltageSolarHoldLimit() const;
     bool isLowCellVoltageProtectionActive() const;
 
     bool testThreshold(float socThreshold, float voltThreshold,
