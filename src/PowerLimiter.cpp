@@ -638,40 +638,40 @@ uint16_t PowerLimiterClass::calcTargetOutput() const
 
 uint16_t PowerLimiterClass::applyBatteryKeepAtSoc(uint16_t targetOutput) const
 {
+    auto action = getBatteryKeepAtSocAction();
+
+    if (BatteryKeepAtSocAction::Normal == action) {
+        return targetOutput;
+    }
+
     auto const& config = Configuration.get();
-
-    if (!config.Battery.Enabled || !config.Battery.KeepAtSocEnabled || !usesStorageBackedInverter()) {
-        return targetOutput;
-    }
-
     auto stats = Battery.getStats();
-    if (!stats->isSoCValid()
-            || stats->isSoCStale()) {
-        return targetOutput;
-    }
-
     float const soc = stats->getSoC();
     float const targetSoc = config.Battery.KeepAtSoc;
 
-    if (soc < targetSoc) {
-        return targetOutput;
-    }
-
-    if (soc > targetSoc) {
+    if (BatteryKeepAtSocAction::MaxDump == action) {
         auto maxStorageOutput = getStorageBackedInvertersConfiguredMaxPowerWatts();
-        DTU_LOGD("keep-at-SoC active: SoC %.1f %% is above target %.1f %%, "
+        DTU_LOGD("keep-at-SoC active: SoC %.1f %% is at or above target %.1f %%, "
                 "requesting max storage-backed output %u W",
                 soc, targetSoc, maxStorageOutput);
         return std::max(targetOutput, maxStorageOutput);
     }
 
     auto solarInputPower = stats->getSolarInputPowerWatts();
-    if (!solarInputPower.has_value() || stats->isSolarInputPowerStale()) {
-        return targetOutput;
-    }
-
     auto batterySolarInputPower = static_cast<uint16_t>(
             std::round(std::max<float>(0, *solarInputPower)));
+
+    if (BatteryKeepAtSocAction::TopOff == action) {
+        auto topOffPower = getBatteryKeepAtSocTopOffPower(*solarInputPower);
+        if (topOffPower > targetOutput) {
+            DTU_LOGD("keep-at-SoC top-off active: SoC %.1f %% reached target %.1f %%, "
+                    "battery solar input is %u W, requesting %u W to leave %u W for charging",
+                    soc, targetSoc, batterySolarInputPower, topOffPower,
+                    config.Battery.KeepAtSocTopOffChargePower);
+        }
+
+        return std::max(targetOutput, topOffPower);
+    }
 
     if (batterySolarInputPower > targetOutput) {
         DTU_LOGD("keep-at-SoC active: SoC %.1f %% reached target %.1f %%, "
@@ -680,6 +680,78 @@ uint16_t PowerLimiterClass::applyBatteryKeepAtSoc(uint16_t targetOutput) const
     }
 
     return std::max(targetOutput, batterySolarInputPower);
+}
+
+PowerLimiterClass::BatteryKeepAtSocAction PowerLimiterClass::getBatteryKeepAtSocAction() const
+{
+    auto const& config = Configuration.get();
+
+    if (!config.Battery.Enabled || !config.Battery.KeepAtSocEnabled || !usesStorageBackedInverter()) {
+        _keepAtSocHardDumpLatched = false;
+        return BatteryKeepAtSocAction::Normal;
+    }
+
+    auto stats = Battery.getStats();
+    if (!stats->isSoCValid() || stats->isSoCStale()) {
+        _keepAtSocHardDumpLatched = false;
+        return BatteryKeepAtSocAction::Normal;
+    }
+
+    float const soc = stats->getSoC();
+    float const targetSoc = config.Battery.KeepAtSoc;
+
+    if (soc < targetSoc) {
+        return BatteryKeepAtSocAction::Normal;
+    }
+
+    if (soc > targetSoc) {
+        return BatteryKeepAtSocAction::MaxDump;
+    }
+
+    auto solarInputPower = stats->getSolarInputPowerWatts();
+    if (!solarInputPower.has_value() || stats->isSolarInputPowerStale()) {
+        return BatteryKeepAtSocAction::MaxDump;
+    }
+
+    if (config.Battery.KeepAtSocBehavior != BatteryKeepAtSocBehavior::VoltageTopOff) {
+        _keepAtSocHardDumpLatched = false;
+        return BatteryKeepAtSocAction::PvPassthrough;
+    }
+
+    auto highestCellVoltage = stats->getHighestCellVoltage();
+    if (!highestCellVoltage.has_value() || stats->isHighestCellVoltageStale()) {
+        _keepAtSocHardDumpLatched = false;
+        return BatteryKeepAtSocAction::PvPassthrough;
+    }
+
+    if (!_keepAtSocHardDumpLatched && *highestCellVoltage >= config.Battery.KeepAtSocTopOffHardDumpVoltage) {
+        _keepAtSocHardDumpLatched = true;
+    } else if (_keepAtSocHardDumpLatched
+            && *highestCellVoltage < config.Battery.KeepAtSocTopOffHardDumpVoltage
+                    - config.Battery.KeepAtSocTopOffHardDumpReleaseMargin) {
+        _keepAtSocHardDumpLatched = false;
+    }
+
+    if (_keepAtSocHardDumpLatched) {
+        return BatteryKeepAtSocAction::MaxDump;
+    }
+
+    if (*highestCellVoltage < config.Battery.KeepAtSocTopOffTargetVoltage) {
+        return BatteryKeepAtSocAction::TopOff;
+    }
+
+    return BatteryKeepAtSocAction::PvPassthrough;
+}
+
+uint16_t PowerLimiterClass::getBatteryKeepAtSocTopOffPower(float solarInputPower) const
+{
+    auto const& config = Configuration.get();
+    auto availablePower = std::max<float>(0, solarInputPower)
+            * std::min<uint8_t>(config.Battery.KeepAtSocTopOffEfficiency, 100) / 100.0f;
+    auto dumpPower = std::max<float>(0, availablePower - config.Battery.KeepAtSocTopOffChargePower);
+
+    return static_cast<uint16_t>(std::min<uint32_t>(
+            std::round(dumpPower), std::numeric_limits<uint16_t>::max()));
 }
 
 /**
@@ -986,19 +1058,7 @@ uint16_t PowerLimiterClass::getStorageBackedInvertersConfiguredMaxPowerWatts() c
 
 bool PowerLimiterClass::isBatteryKeepAtSocForceDischargeActive() const
 {
-    auto const& config = Configuration.get();
-
-    if (!config.Battery.Enabled || !config.Battery.KeepAtSocEnabled || !usesStorageBackedInverter()) {
-        return false;
-    }
-
-    auto stats = Battery.getStats();
-    if (!stats->isSoCValid()
-            || stats->isSoCStale()) {
-        return false;
-    }
-
-    return stats->getSoC() > config.Battery.KeepAtSoc;
+    return BatteryKeepAtSocAction::MaxDump == getBatteryKeepAtSocAction();
 }
 
 float PowerLimiterClass::getBatteryInvertersOutputAcWatts() const

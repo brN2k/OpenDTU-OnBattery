@@ -10,7 +10,7 @@
 
 #define CONFIG_FILENAME "/config.json"
 #define CONFIG_VERSION 0x00011e00 // 0.1.30 // make sure to clean all after change
-#define CONFIG_VERSION_ONBATTERY 11
+#define CONFIG_VERSION_ONBATTERY 12
 
 #define WIFI_MAX_SSID_STRLEN 32
 #define WIFI_MAX_PASSWORD_STRLEN 64
@@ -248,6 +248,10 @@ struct BATTERY_MQTT_CONFIG_T {
     char LowestCellVoltageJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
     char LowestCellVoltageBackupTopic[MQTT_MAX_TOPIC_STRLEN + 1];
     char LowestCellVoltageBackupJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
+    char HighestCellVoltageTopic[MQTT_MAX_TOPIC_STRLEN + 1];
+    char HighestCellVoltageJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
+    char HighestCellVoltageBackupTopic[MQTT_MAX_TOPIC_STRLEN + 1];
+    char HighestCellVoltageBackupJsonPath[MQTT_MAX_JSON_PATH_STRLEN + 1];
     uint16_t TopicTimeout;
 };
 using BatteryMqttConfig = struct BATTERY_MQTT_CONFIG_T;
@@ -261,6 +265,11 @@ using BatterySerialConfig = struct BATTERY_SERIAL_CONFIG_T;
 enum class BatteryLowCellVoltageProtectionMode : uint8_t {
     Cutoff = 0,
     SolarHold = 1,
+};
+
+enum class BatteryKeepAtSocBehavior : uint8_t {
+    PvPassthrough = 0,
+    VoltageTopOff = 1,
 };
 
 struct BATTERY_CONFIG_T {
@@ -282,6 +291,12 @@ struct BATTERY_CONFIG_T {
     bool UseBatteryReportedChargeCurrentLimit;
     bool KeepAtSocEnabled;
     uint8_t KeepAtSoc;
+    BatteryKeepAtSocBehavior KeepAtSocBehavior;
+    float KeepAtSocTopOffTargetVoltage;
+    float KeepAtSocTopOffHardDumpVoltage;
+    float KeepAtSocTopOffHardDumpReleaseMargin;
+    uint8_t KeepAtSocTopOffEfficiency;
+    uint16_t KeepAtSocTopOffChargePower;
     bool LowCellVoltageProtectionEnabled;
     float LowCellVoltageThreshold;
     BatteryLowCellVoltageProtectionMode LowCellVoltageProtectionMode;

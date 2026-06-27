@@ -14,7 +14,9 @@ bool Stats::updateAvailable(uint32_t since) const
             || _primarySolarInputPowerWatts.LastUpdate > 0
             || _backupSolarInputPowerWatts.LastUpdate > 0
             || _primaryLowestCellVoltage.LastUpdate > 0
-            || _backupLowestCellVoltage.LastUpdate > 0;
+            || _backupLowestCellVoltage.LastUpdate > 0
+            || _primaryHighestCellVoltage.LastUpdate > 0
+            || _backupHighestCellVoltage.LastUpdate > 0;
 
     return hasTimedValues && millis() - since >= 1000;
 }
@@ -42,6 +44,12 @@ void Stats::getLiveViewData(JsonVariant& root) const
     if (lowestCellVoltage.has_value()) {
         addLiveViewInSection(root, "cells", "cellMinVoltage", *lowestCellVoltage, "V", 3);
         addLiveViewDataStatus(root, "cells", "cellMinVoltage", getLowestCellVoltageDataStatus());
+    }
+
+    auto highestCellVoltage = getHighestCellVoltage();
+    if (highestCellVoltage.has_value()) {
+        addLiveViewInSection(root, "cells", "cellMaxVoltage", *highestCellVoltage, "V", 3);
+        addLiveViewDataStatus(root, "cells", "cellMaxVoltage", getHighestCellVoltageDataStatus());
     }
 }
 
@@ -83,6 +91,26 @@ DataStatus Stats::getLowestCellVoltageDataStatus() const
     return getDataStatus(_primaryLowestCellVoltage.LastUpdate,
             _backupLowestCellVoltage.LastUpdate,
             config.Battery.Mqtt.LowestCellVoltageBackupTopic);
+}
+
+std::optional<float> Stats::getHighestCellVoltage() const
+{
+    auto const& config = Configuration.get();
+    return getValue(_primaryHighestCellVoltage,
+            _backupHighestCellVoltage, config.Battery.Mqtt.HighestCellVoltageBackupTopic);
+}
+
+bool Stats::isHighestCellVoltageStale() const
+{
+    return DataStatus::Error == getHighestCellVoltageDataStatus();
+}
+
+DataStatus Stats::getHighestCellVoltageDataStatus() const
+{
+    auto const& config = Configuration.get();
+    return getDataStatus(_primaryHighestCellVoltage.LastUpdate,
+            _backupHighestCellVoltage.LastUpdate,
+            config.Battery.Mqtt.HighestCellVoltageBackupTopic);
 }
 
 bool Stats::isSoCStale() const

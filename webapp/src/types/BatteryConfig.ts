@@ -53,6 +53,10 @@ export interface BatteryMqttConfig {
     lowest_cell_voltage_json_path: string;
     lowest_cell_voltage_backup_topic: string;
     lowest_cell_voltage_backup_json_path: string;
+    highest_cell_voltage_topic: string;
+    highest_cell_voltage_json_path: string;
+    highest_cell_voltage_backup_topic: string;
+    highest_cell_voltage_backup_json_path: string;
     topic_timeout: number;
 }
 
@@ -80,6 +84,12 @@ export interface BatteryConfig {
     use_battery_reported_charge_current_limit: boolean;
     keep_at_soc_enabled: boolean;
     keep_at_soc: number;
+    keep_at_soc_behavior: number;
+    keep_at_soc_top_off_target_voltage: number;
+    keep_at_soc_top_off_hard_dump_voltage: number;
+    keep_at_soc_top_off_hard_dump_release_margin: number;
+    keep_at_soc_top_off_efficiency: number;
+    keep_at_soc_top_off_charge_power: number;
     low_cell_voltage_protection_enabled: boolean;
     low_cell_voltage_threshold: number;
     low_cell_voltage_protection_mode: number;

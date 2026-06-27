@@ -79,12 +79,14 @@ private:
     bool _fromStart = false;
     bool _oneStopPerNightDone = false;
     mutable bool _lowCellVoltageProtectionLatched = false;
+    mutable bool _keepAtSocHardDumpLatched = false;
 
     std::pair<bool, uint32_t> _nextInverterRestart = { false, 0 };
     bool _fullSolarPassThroughActive = false;
     float _loadCorrectedVoltage = 0.0f;
 
     enum class LowCellVoltageProtectionAction : uint8_t { None, Cutoff, SolarHold };
+    enum class BatteryKeepAtSocAction : uint8_t { Normal, PvPassthrough, TopOff, MaxDump };
 
     frozen::string const& getStatusText(Status status) const;
     void announceStatus(Status status);
@@ -95,6 +97,8 @@ private:
     void unconditionalFullSolarPassthrough();
     uint16_t calcTargetOutput() const;
     uint16_t applyBatteryKeepAtSoc(uint16_t targetOutput) const;
+    BatteryKeepAtSocAction getBatteryKeepAtSocAction() const;
+    uint16_t getBatteryKeepAtSocTopOffPower(float solarInputPower) const;
     using inverter_filter_t = std::function<bool(PowerLimiterInverter const&)>;
     uint16_t updateInverterLimits(uint16_t powerRequested, inverter_filter_t filter, std::string const& filterExpression);
     uint16_t calcPowerBusUsage(uint16_t powerRequested) const;

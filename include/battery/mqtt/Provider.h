@@ -28,6 +28,8 @@ private:
     String _solarInputPowerBackupTopic;
     String _lowestCellVoltageTopic;
     String _lowestCellVoltageBackupTopic;
+    String _highestCellVoltageTopic;
+    String _highestCellVoltageBackupTopic;
     std::shared_ptr<Stats> _stats = std::make_shared<Stats>();
     uint8_t _socPrecision = 0;
     uint8_t _currentPrecision = 0;
@@ -51,6 +53,9 @@ private:
             char const* topic, uint8_t const* payload, size_t len,
             char const* jsonPath, bool backup);
     void onMqttMessageLowestCellVoltage(espMqttClientTypes::MessageProperties const& properties,
+            char const* topic, uint8_t const* payload, size_t len,
+            char const* jsonPath, bool backup);
+    void onMqttMessageHighestCellVoltage(espMqttClientTypes::MessageProperties const& properties,
             char const* topic, uint8_t const* payload, size_t len,
             char const* jsonPath, bool backup);
     uint8_t calculatePrecision(float value);

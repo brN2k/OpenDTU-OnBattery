@@ -83,6 +83,10 @@ public:
     virtual bool isLowestCellVoltageStale() const { return false; }
     virtual DataStatus getLowestCellVoltageDataStatus() const { return isLowestCellVoltageStale() ? DataStatus::Error : DataStatus::Ok; }
 
+    virtual std::optional<float> getHighestCellVoltage() const { return std::nullopt; }
+    virtual bool isHighestCellVoltageStale() const { return false; }
+    virtual DataStatus getHighestCellVoltageDataStatus() const { return isHighestCellVoltageStale() ? DataStatus::Error : DataStatus::Ok; }
+
 protected:
     virtual void mqttPublish() const;
 

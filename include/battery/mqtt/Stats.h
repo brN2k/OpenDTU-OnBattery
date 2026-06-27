@@ -28,6 +28,10 @@ public:
     bool isLowestCellVoltageStale() const final;
     DataStatus getLowestCellVoltageDataStatus() const final;
 
+    std::optional<float> getHighestCellVoltage() const final;
+    bool isHighestCellVoltageStale() const final;
+    DataStatus getHighestCellVoltageDataStatus() const final;
+
     bool isSoCStale() const final;
     DataStatus getSoCDataStatus() const final;
 
@@ -66,6 +70,12 @@ private:
         _lastUpdate = timestamp;
     }
 
+    void setHighestCellVoltage(float voltage, uint32_t timestamp, bool backup) {
+        auto& source = backup ? _backupHighestCellVoltage : _primaryHighestCellVoltage;
+        source = { voltage, 3, timestamp };
+        _lastUpdate = timestamp;
+    }
+
     void refreshActiveSoC();
     bool isFresh(uint32_t lastUpdate) const;
     DataStatus getDataStatus(uint32_t primaryLastUpdate,
@@ -85,6 +95,9 @@ private:
 
     SourceValue _primaryLowestCellVoltage;
     SourceValue _backupLowestCellVoltage;
+
+    SourceValue _primaryHighestCellVoltage;
+    SourceValue _backupHighestCellVoltage;
 };
 
 } // namespace Batteries::Mqtt

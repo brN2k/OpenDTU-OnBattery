@@ -258,6 +258,46 @@
                     />
                 </CardElement>
 
+                <CardElement
+                    :text="$t('batteryadmin.MqttHighestCellVoltageConfiguration')"
+                    textVariant="text-bg-primary"
+                    addSpace
+                >
+                    <InputElement
+                        :label="$t('batteryadmin.MqttHighestCellVoltageTopic')"
+                        v-model="batteryConfigList.mqtt.highest_cell_voltage_topic"
+                        type="text"
+                        maxlength="256"
+                        wide
+                    />
+
+                    <InputElement
+                        :label="$t('batteryadmin.MqttJsonPath')"
+                        v-model="batteryConfigList.mqtt.highest_cell_voltage_json_path"
+                        type="text"
+                        maxlength="256"
+                        :tooltip="$t('batteryadmin.MqttJsonPathDescription')"
+                        wide
+                    />
+
+                    <InputElement
+                        :label="$t('batteryadmin.MqttBackupTopic')"
+                        v-model="batteryConfigList.mqtt.highest_cell_voltage_backup_topic"
+                        type="text"
+                        maxlength="256"
+                        wide
+                    />
+
+                    <InputElement
+                        :label="$t('batteryadmin.MqttBackupJsonPath')"
+                        v-model="batteryConfigList.mqtt.highest_cell_voltage_backup_json_path"
+                        type="text"
+                        maxlength="256"
+                        :tooltip="$t('batteryadmin.MqttJsonPathDescription')"
+                        wide
+                    />
+                </CardElement>
+
                 <CardElement :text="$t('batteryadmin.MqttTimeoutConfiguration')" textVariant="text-bg-primary" addSpace>
                     <InputElement
                         :label="$t('batteryadmin.MqttTopicTimeout')"
@@ -290,6 +330,82 @@
                         postfix="%"
                         wide
                     />
+
+                    <div class="row mb-3" v-if="batteryConfigList.keep_at_soc_enabled">
+                        <label for="keep_at_soc_behavior" class="col-sm-4 col-form-label">
+                            {{ $t('batteryadmin.KeepAtSocBehavior') }}
+                        </label>
+                        <div class="col-sm-8">
+                            <select
+                                id="keep_at_soc_behavior"
+                                class="form-select"
+                                v-model="batteryConfigList.keep_at_soc_behavior"
+                            >
+                                <option v-for="mode in keepAtSocBehaviorList" :key="mode.key" :value="mode.key">
+                                    {{ $t(`batteryadmin.KeepAtSocBehavior` + mode.value) }}
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <template
+                        v-if="batteryConfigList.keep_at_soc_enabled && batteryConfigList.keep_at_soc_behavior == 1"
+                    >
+                        <InputElement
+                            :label="$t('batteryadmin.KeepAtSocTopOffTargetVoltage')"
+                            v-model="batteryConfigList.keep_at_soc_top_off_target_voltage"
+                            type="number"
+                            min="0"
+                            max="5"
+                            step="0.001"
+                            postfix="V"
+                            wide
+                        />
+
+                        <InputElement
+                            :label="$t('batteryadmin.KeepAtSocTopOffHardDumpVoltage')"
+                            v-model="batteryConfigList.keep_at_soc_top_off_hard_dump_voltage"
+                            type="number"
+                            min="0"
+                            max="5"
+                            step="0.001"
+                            postfix="V"
+                            wide
+                        />
+
+                        <InputElement
+                            :label="$t('batteryadmin.KeepAtSocTopOffHardDumpReleaseMargin')"
+                            v-model="batteryConfigList.keep_at_soc_top_off_hard_dump_release_margin"
+                            type="number"
+                            min="0"
+                            max="1"
+                            step="0.001"
+                            postfix="V"
+                            wide
+                        />
+
+                        <InputElement
+                            :label="$t('batteryadmin.KeepAtSocTopOffEfficiency')"
+                            v-model="batteryConfigList.keep_at_soc_top_off_efficiency"
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            postfix="%"
+                            wide
+                        />
+
+                        <InputElement
+                            :label="$t('batteryadmin.KeepAtSocTopOffChargePower')"
+                            v-model="batteryConfigList.keep_at_soc_top_off_charge_power"
+                            type="number"
+                            min="0"
+                            max="10000"
+                            step="1"
+                            :postfix="$t('batteryadmin.Watt')"
+                            wide
+                        />
+                    </template>
                 </CardElement>
 
                 <CardElement
@@ -1098,6 +1214,10 @@ export default defineComponent({
             amperageUnitTypeList: [
                 { key: 1, value: 'mA' },
                 { key: 0, value: 'A' },
+            ],
+            keepAtSocBehaviorList: [
+                { key: 0, value: 'PvPassthrough' },
+                { key: 1, value: 'VoltageTopOff' },
             ],
             lowCellVoltageProtectionModeList: [
                 { key: 0, value: 'Cutoff' },

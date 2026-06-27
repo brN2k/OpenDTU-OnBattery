@@ -149,6 +149,32 @@ bool Provider::init()
             _lowestCellVoltageBackupTopic.c_str());
     }
 
+    _highestCellVoltageTopic = config.Battery.Mqtt.HighestCellVoltageTopic;
+    if (!_highestCellVoltageTopic.isEmpty()) {
+        MqttSettings.subscribe(_highestCellVoltageTopic, 0/*QoS*/,
+                std::bind(&Provider::onMqttMessageHighestCellVoltage,
+                    this, std::placeholders::_1, std::placeholders::_2,
+                    std::placeholders::_3, std::placeholders::_4,
+                    config.Battery.Mqtt.HighestCellVoltageJsonPath, false)
+                );
+
+        DTU_LOGD("Subscribed to '%s' for highest cell voltage readings",
+            _highestCellVoltageTopic.c_str());
+    }
+
+    _highestCellVoltageBackupTopic = config.Battery.Mqtt.HighestCellVoltageBackupTopic;
+    if (!_highestCellVoltageBackupTopic.isEmpty()) {
+        MqttSettings.subscribe(_highestCellVoltageBackupTopic, 0/*QoS*/,
+                std::bind(&Provider::onMqttMessageHighestCellVoltage,
+                    this, std::placeholders::_1, std::placeholders::_2,
+                    std::placeholders::_3, std::placeholders::_4,
+                    config.Battery.Mqtt.HighestCellVoltageBackupJsonPath, true)
+                );
+
+        DTU_LOGD("Subscribed to '%s' for backup highest cell voltage readings",
+            _highestCellVoltageBackupTopic.c_str());
+    }
+
     return true;
 }
 
@@ -192,6 +218,14 @@ void Provider::deinit()
 
     if (!_lowestCellVoltageBackupTopic.isEmpty()) {
         MqttSettings.unsubscribe(_lowestCellVoltageBackupTopic);
+    }
+
+    if (!_highestCellVoltageTopic.isEmpty()) {
+        MqttSettings.unsubscribe(_highestCellVoltageTopic);
+    }
+
+    if (!_highestCellVoltageBackupTopic.isEmpty()) {
+        MqttSettings.unsubscribe(_highestCellVoltageBackupTopic);
     }
 }
 
@@ -392,6 +426,27 @@ void Provider::onMqttMessageLowestCellVoltage(espMqttClientTypes::MessagePropert
     _stats->setLowestCellVoltage(*voltage, millis(), backup);
 
     DTU_LOGD("Updated %slowest cell voltage to %.3f V from '%s'",
+            backup ? "backup " : "", *voltage, topic);
+}
+
+void Provider::onMqttMessageHighestCellVoltage(espMqttClientTypes::MessageProperties const& properties,
+        char const* topic, uint8_t const* payload, size_t len,
+        char const* jsonPath, bool backup)
+{
+    auto voltage = Utils::getNumericValueFromMqttPayload<float>("MqttBattery",
+            std::string(reinterpret_cast<const char*>(payload), len), topic,
+            jsonPath);
+
+    if (!voltage.has_value()) { return; }
+
+    if (*voltage < 0 || *voltage > 5) {
+        DTU_LOGW("Implausible highest cell voltage '%.3f' in topic '%s'", *voltage, topic);
+        return;
+    }
+
+    _stats->setHighestCellVoltage(*voltage, millis(), backup);
+
+    DTU_LOGD("Updated %shighest cell voltage to %.3f V from '%s'",
             backup ? "backup " : "", *voltage, topic);
 }
 

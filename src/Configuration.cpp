@@ -8,6 +8,7 @@
 #include "defaults.h"
 #include <LittleFS.h>
 #include <esp_log.h>
+#include <limits>
 #include <nvs_flash.h>
 
 #undef TAG
@@ -147,6 +148,12 @@ void ConfigurationClass::serializeBatteryConfig(BatteryConfig const& source, Jso
     target["use_battery_reported_charge_current_limit"] = config.Battery.UseBatteryReportedChargeCurrentLimit;
     target["keep_at_soc_enabled"] = config.Battery.KeepAtSocEnabled;
     target["keep_at_soc"] = config.Battery.KeepAtSoc;
+    target["keep_at_soc_behavior"] = static_cast<uint8_t>(config.Battery.KeepAtSocBehavior);
+    target["keep_at_soc_top_off_target_voltage"] = config.Battery.KeepAtSocTopOffTargetVoltage;
+    target["keep_at_soc_top_off_hard_dump_voltage"] = config.Battery.KeepAtSocTopOffHardDumpVoltage;
+    target["keep_at_soc_top_off_hard_dump_release_margin"] = config.Battery.KeepAtSocTopOffHardDumpReleaseMargin;
+    target["keep_at_soc_top_off_efficiency"] = config.Battery.KeepAtSocTopOffEfficiency;
+    target["keep_at_soc_top_off_charge_power"] = config.Battery.KeepAtSocTopOffChargePower;
     target["low_cell_voltage_protection_enabled"] = config.Battery.LowCellVoltageProtectionEnabled;
     target["low_cell_voltage_threshold"] = config.Battery.LowCellVoltageThreshold;
     target["low_cell_voltage_protection_mode"] = static_cast<uint8_t>(config.Battery.LowCellVoltageProtectionMode);
@@ -214,6 +221,10 @@ void ConfigurationClass::serializeBatteryMqttConfig(BatteryMqttConfig const& sou
     target["lowest_cell_voltage_json_path"] = source.LowestCellVoltageJsonPath;
     target["lowest_cell_voltage_backup_topic"] = source.LowestCellVoltageBackupTopic;
     target["lowest_cell_voltage_backup_json_path"] = source.LowestCellVoltageBackupJsonPath;
+    target["highest_cell_voltage_topic"] = source.HighestCellVoltageTopic;
+    target["highest_cell_voltage_json_path"] = source.HighestCellVoltageJsonPath;
+    target["highest_cell_voltage_backup_topic"] = source.HighestCellVoltageBackupTopic;
+    target["highest_cell_voltage_backup_json_path"] = source.HighestCellVoltageBackupJsonPath;
     target["topic_timeout"] = source.TopicTimeout;
 }
 
@@ -618,6 +629,35 @@ void ConfigurationClass::deserializeBatteryConfig(JsonObject const& source, Batt
     target.UseBatteryReportedChargeCurrentLimit = source["use_battery_reported_charge_current_limit"] | BATTERY_USE_BATTERY_REPORTED_CHARGE_CURRENT_LIMIT;
     target.KeepAtSocEnabled = source["keep_at_soc_enabled"] | BATTERY_KEEP_AT_SOC_ENABLED;
     target.KeepAtSoc = source["keep_at_soc"] | BATTERY_KEEP_AT_SOC;
+    auto keepAtSocBehavior = source["keep_at_soc_behavior"] | BATTERY_KEEP_AT_SOC_BEHAVIOR;
+    if (keepAtSocBehavior < 0
+            || keepAtSocBehavior > static_cast<uint8_t>(BatteryKeepAtSocBehavior::VoltageTopOff)) {
+        keepAtSocBehavior = static_cast<uint8_t>(BatteryKeepAtSocBehavior::PvPassthrough);
+    }
+    target.KeepAtSocBehavior = static_cast<BatteryKeepAtSocBehavior>(keepAtSocBehavior);
+    target.KeepAtSocTopOffTargetVoltage = source["keep_at_soc_top_off_target_voltage"] | BATTERY_KEEP_AT_SOC_TOP_OFF_TARGET_VOLTAGE;
+    if (target.KeepAtSocTopOffTargetVoltage < 0) { target.KeepAtSocTopOffTargetVoltage = 0; }
+    if (target.KeepAtSocTopOffTargetVoltage > 5) { target.KeepAtSocTopOffTargetVoltage = 5; }
+    target.KeepAtSocTopOffHardDumpVoltage = source["keep_at_soc_top_off_hard_dump_voltage"] | BATTERY_KEEP_AT_SOC_TOP_OFF_HARD_DUMP_VOLTAGE;
+    if (target.KeepAtSocTopOffHardDumpVoltage < target.KeepAtSocTopOffTargetVoltage) {
+        target.KeepAtSocTopOffHardDumpVoltage = target.KeepAtSocTopOffTargetVoltage;
+    }
+    if (target.KeepAtSocTopOffHardDumpVoltage > 5) { target.KeepAtSocTopOffHardDumpVoltage = 5; }
+    target.KeepAtSocTopOffHardDumpReleaseMargin = source["keep_at_soc_top_off_hard_dump_release_margin"] | BATTERY_KEEP_AT_SOC_TOP_OFF_HARD_DUMP_RELEASE_MARGIN;
+    if (target.KeepAtSocTopOffHardDumpReleaseMargin < 0) { target.KeepAtSocTopOffHardDumpReleaseMargin = 0; }
+    if (target.KeepAtSocTopOffHardDumpReleaseMargin > target.KeepAtSocTopOffHardDumpVoltage) {
+        target.KeepAtSocTopOffHardDumpReleaseMargin = target.KeepAtSocTopOffHardDumpVoltage;
+    }
+    auto topOffEfficiency = source["keep_at_soc_top_off_efficiency"] | BATTERY_KEEP_AT_SOC_TOP_OFF_EFFICIENCY;
+    if (topOffEfficiency < 0) { topOffEfficiency = 0; }
+    if (topOffEfficiency > 100) { topOffEfficiency = 100; }
+    target.KeepAtSocTopOffEfficiency = topOffEfficiency;
+    auto topOffChargePower = source["keep_at_soc_top_off_charge_power"] | BATTERY_KEEP_AT_SOC_TOP_OFF_CHARGE_POWER;
+    if (topOffChargePower < 0) { topOffChargePower = 0; }
+    if (topOffChargePower > std::numeric_limits<uint16_t>::max()) {
+        topOffChargePower = std::numeric_limits<uint16_t>::max();
+    }
+    target.KeepAtSocTopOffChargePower = topOffChargePower;
     target.LowCellVoltageProtectionEnabled = source["low_cell_voltage_protection_enabled"] | BATTERY_LOW_CELL_VOLTAGE_PROTECTION_ENABLED;
     target.LowCellVoltageThreshold = source["low_cell_voltage_threshold"] | BATTERY_LOW_CELL_VOLTAGE_THRESHOLD;
     auto lowCellVoltageProtectionMode = source["low_cell_voltage_protection_mode"] | BATTERY_LOW_CELL_VOLTAGE_PROTECTION_MODE;
@@ -691,6 +731,10 @@ void ConfigurationClass::deserializeBatteryMqttConfig(JsonObject const& source, 
     strlcpy(target.LowestCellVoltageJsonPath, source["lowest_cell_voltage_json_path"] | "", sizeof(target.LowestCellVoltageJsonPath));
     strlcpy(target.LowestCellVoltageBackupTopic, source["lowest_cell_voltage_backup_topic"] | "", sizeof(target.LowestCellVoltageBackupTopic));
     strlcpy(target.LowestCellVoltageBackupJsonPath, source["lowest_cell_voltage_backup_json_path"] | "", sizeof(target.LowestCellVoltageBackupJsonPath));
+    strlcpy(target.HighestCellVoltageTopic, source["highest_cell_voltage_topic"] | "", sizeof(target.HighestCellVoltageTopic));
+    strlcpy(target.HighestCellVoltageJsonPath, source["highest_cell_voltage_json_path"] | "", sizeof(target.HighestCellVoltageJsonPath));
+    strlcpy(target.HighestCellVoltageBackupTopic, source["highest_cell_voltage_backup_topic"] | "", sizeof(target.HighestCellVoltageBackupTopic));
+    strlcpy(target.HighestCellVoltageBackupJsonPath, source["highest_cell_voltage_backup_json_path"] | "", sizeof(target.HighestCellVoltageBackupJsonPath));
     target.TopicTimeout = source["topic_timeout"] | BATTERY_MQTT_TOPIC_TIMEOUT;
 }
 
