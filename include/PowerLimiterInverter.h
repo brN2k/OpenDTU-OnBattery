@@ -104,6 +104,7 @@ protected:
     void setTargetPowerLimitWatts(uint16_t power) { _oTargetPowerLimitWatts = power; }
     void setTargetPowerState(bool enable) { _oTargetPowerState = enable; }
     void setExpectedOutputAcWatts(uint16_t power) { _expectedOutputAcWatts = power; }
+    bool confirmLimitOutputMismatch(bool mismatch);
 
     static char mpptName(MpptNum_t mppt);
 
@@ -128,6 +129,9 @@ private:
     // track the number of times an update command
     // issued to the inverter timed out *or* failed
     uint8_t _updateTimeouts = 0;
+    uint32_t _lastSuccessfulUpdateDurationMs = 0;
+    uint8_t _limitOutputMismatchCount = 0;
+    uint32_t _lastLimitOutputMismatchRecovery = 0;
 
     // track (target) state
     std::optional<uint32_t> _oUpdateStartMillis = std::nullopt;

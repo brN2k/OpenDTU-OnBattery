@@ -1,4 +1,9 @@
 #include "PowerLimiterBatteryInverter.h"
+#include <LogHelper.h>
+
+#undef TAG
+static const char* TAG = "dynamicPowerLimiter";
+#define SUBTAG _logPrefix
 
 PowerLimiterBatteryInverter::PowerLimiterBatteryInverter(PowerLimiterInverterConfig const& config)
     : PowerLimiterInverter(config) { }
@@ -44,12 +49,31 @@ uint16_t PowerLimiterBatteryInverter::applyReduction(uint16_t reduction, bool al
 
     auto low = std::min(getCurrentLimitWatts(), getCurrentOutputAcWatts());
     if (low <= _config.LowerPowerLimit) {
+        auto currentOutputAcWatts = getCurrentOutputAcWatts();
+        auto reducibleOutput = currentOutputAcWatts - _config.LowerPowerLimit;
+        if (reducibleOutput > 0 && reduction >= reducibleOutput) {
+            confirmLimitOutputMismatch(false);
+            setAcOutput(_config.LowerPowerLimit);
+            return reducibleOutput;
+        }
+
+        if (reducibleOutput > 0 && confirmLimitOutputMismatch(true)) {
+            auto targetOutput = currentOutputAcWatts - reduction;
+            DTU_LOGW("reported limit and output disagree, reasserting requested output of %u W",
+                    targetOutput);
+            setAcOutput(targetOutput);
+            return reduction;
+        }
+
         if (allowStandby && _config.AllowStandby) {
+            confirmLimitOutputMismatch(false);
             standby();
             return std::min(reduction, getCurrentOutputAcWatts());
         }
         return 0;
     }
+
+    confirmLimitOutputMismatch(false);
 
     if ((getCurrentLimitWatts() - _config.LowerPowerLimit) >= reduction) {
         setAcOutput(getCurrentLimitWatts() - reduction);
@@ -62,7 +86,8 @@ uint16_t PowerLimiterBatteryInverter::applyReduction(uint16_t reduction, bool al
     }
 
     setAcOutput(_config.LowerPowerLimit);
-    return getCurrentOutputAcWatts() - _config.LowerPowerLimit;
+    return std::min<uint16_t>(
+            reduction, getCurrentOutputAcWatts() - _config.LowerPowerLimit);
 }
 
 uint16_t PowerLimiterBatteryInverter::applyIncrease(uint16_t increase)

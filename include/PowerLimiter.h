@@ -69,6 +69,8 @@ private:
     uint32_t _lastCalculation = 0;
     static constexpr uint32_t _calculationBackoffMsDefault = 128;
     uint32_t _calculationBackoffMs = _calculationBackoffMsDefault;
+    uint32_t _lastObservedPowerMeterUpdate = 0;
+    bool _recalculationPending = false;
     Mode _mode = Mode::Normal;
 
     std::deque<std::unique_ptr<PowerLimiterInverter>> _inverters;

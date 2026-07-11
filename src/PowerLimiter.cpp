@@ -146,6 +146,11 @@ void PowerLimiterClass::reloadConfig()
 void PowerLimiterClass::loop()
 {
     auto const& config = Configuration.get();
+    auto const powerMeterLastUpdate = PowerMeter.getLastUpdate();
+    if (powerMeterLastUpdate != 0 && powerMeterLastUpdate != _lastObservedPowerMeterUpdate) {
+        _lastObservedPowerMeterUpdate = powerMeterLastUpdate;
+        _recalculationPending = true;
+    }
 
     // we know that the Hoymiles library refuses to send any message to any
     // inverter until the system has valid time information. until then we can
@@ -204,17 +209,18 @@ void PowerLimiterClass::loop()
     // if the power meter is being used, i.e., if its data is valid, we want to
     // wait for a new reading after adjusting the inverter limit. otherwise, we
     // proceed as we will use a fallback limit independent of the power meter.
-    // the power meter reading is expected to be at most 2 seconds old when it
-    // arrives. this can be the case for readings provided by networked meter
-    // readers, where a packet needs to travel through the network for some
-    // time after the actual measurement was done by the reader.
-    if (PowerMeter.isDataValid() && PowerMeter.getLastUpdate() <= (latestInverterStats + 2000)) {
+    // Only use a meter sample received after the inverter reported its updated
+    // output. A short settle time prevents accepting an HTTP request that
+    // started before the inverter report, without waiting several full polls.
+    static constexpr uint32_t powerMeterSettleTimeMs = 500;
+    if (PowerMeter.isDataValid()
+            && powerMeterLastUpdate <= (latestInverterStats + powerMeterSettleTimeMs)) {
         return announceStatus(Status::PowerMeterPending);
     }
 
     // since _lastCalculation and _calculationBackoffMs are initialized to
     // zero, this test is passed the first time the condition is checked.
-    if ((millis() - _lastCalculation) < _calculationBackoffMs) {
+    if (!_recalculationPending && (millis() - _lastCalculation) < _calculationBackoffMs) {
         return announceStatus(Status::Stable);
     }
 
@@ -418,6 +424,7 @@ void PowerLimiterClass::loop()
     bool limitUpdated = updateInverters();
 
     _lastCalculation = millis();
+    _recalculationPending = false;
 
     if (!limitUpdated) {
         // increase polling backoff if system seems to be stable
@@ -871,7 +878,7 @@ uint16_t PowerLimiterClass::updateInverterLimits(uint16_t powerRequested,
 
         for (auto pInv : matchingInverters) {
             auto maxReduction = pInv->getMaxReductionWatts(allowStandby);
-            if (reduction >= hysteresis && maxReduction >= hysteresis) {
+            if (reduction > 0 && maxReduction > 0) {
                 reduction -= pInv->applyReduction(reduction, allowStandby);
             }
             covered += pInv->getExpectedOutputAcWatts();
@@ -887,7 +894,7 @@ uint16_t PowerLimiterClass::updateInverterLimits(uint16_t powerRequested,
 
         for (auto pInv : matchingInverters) {
             auto maxIncrease = pInv->getMaxIncreaseWatts();
-            if (increase >= hysteresis && maxIncrease >= hysteresis) {
+            if (increase > 0 && maxIncrease > 0) {
                 increase -= pInv->applyIncrease(increase);
             }
             covered += pInv->getExpectedOutputAcWatts();

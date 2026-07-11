@@ -1,4 +1,9 @@
 #include "PowerLimiterSmartBufferInverter.h"
+#include <LogHelper.h>
+
+#undef TAG
+static const char* TAG = "dynamicPowerLimiter";
+#define SUBTAG _logPrefix
 
 PowerLimiterSmartBufferInverter::PowerLimiterSmartBufferInverter(PowerLimiterInverterConfig const& config)
     : PowerLimiterOverscalingInverter(config) { }
@@ -68,16 +73,28 @@ uint16_t PowerLimiterSmartBufferInverter::applyReduction(uint16_t reduction, boo
         // complete requested reduction, otherwise avoid overshooting it.
         auto reducibleOutput = currentOutputAcWatts - _config.LowerPowerLimit;
         if (reducibleOutput > 0 && reduction >= reducibleOutput) {
+            confirmLimitOutputMismatch(false);
             setAcOutput(_config.LowerPowerLimit);
             return reducibleOutput;
         }
 
+        if (reducibleOutput > 0 && confirmLimitOutputMismatch(true)) {
+            auto targetOutput = currentOutputAcWatts - reduction;
+            DTU_LOGW("reported limit and output disagree, reasserting requested output of %u W",
+                    targetOutput);
+            setAcOutput(targetOutput);
+            return reduction;
+        }
+
         if (allowStandby && _config.AllowStandby) {
+            confirmLimitOutputMismatch(false);
             standby();
             return std::min(reduction, currentOutputAcWatts);
         }
         return 0;
     }
+
+    confirmLimitOutputMismatch(false);
 
     if ((currentOutputAcWatts - _config.LowerPowerLimit) >= reduction) {
         setAcOutput(currentOutputAcWatts - reduction);

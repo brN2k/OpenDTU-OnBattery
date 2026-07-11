@@ -140,8 +140,11 @@ bool PowerLimiterInverter::update()
         return reset();
     };
 
-    if ((millis() - *_oUpdateStartMillis) > 30 * 1000) {
-        DTU_LOGW("timeout (%d in succession), state transition pending: %s, limit pending: %s",
+    uint32_t const updateTimeoutMs = std::min<uint32_t>(30 * 1000,
+            std::max<uint32_t>(10 * 1000, _lastSuccessfulUpdateDurationMs * 3));
+    if ((millis() - *_oUpdateStartMillis) > updateTimeoutMs) {
+        DTU_LOGW("timeout after %u ms (%d in succession), state transition pending: %s, limit pending: %s",
+                updateTimeoutMs,
                 _updateTimeouts,
                 (_oTargetPowerState.has_value()?"yes":"no"),
                 (_oTargetPowerLimitWatts.has_value()?"yes":"no"));
@@ -252,9 +255,31 @@ bool PowerLimiterInverter::update()
     // enable power production only after setting the desired limit
     if (switchPowerState(true)) { return true; }
 
+    _lastSuccessfulUpdateDurationMs = millis() - *_oUpdateStartMillis;
     _updateTimeouts = 0;
 
     return reset();
+}
+
+bool PowerLimiterInverter::confirmLimitOutputMismatch(bool mismatch)
+{
+    if (!mismatch) {
+        _limitOutputMismatchCount = 0;
+        return false;
+    }
+
+    if (_limitOutputMismatchCount < 2) {
+        ++_limitOutputMismatchCount;
+    }
+
+    if (_limitOutputMismatchCount < 2
+            || (millis() - _lastLimitOutputMismatchRecovery) < 10 * 1000) {
+        return false;
+    }
+
+    _limitOutputMismatchCount = 0;
+    _lastLimitOutputMismatchRecovery = millis();
+    return true;
 }
 
 bool PowerLimiterInverter::retire()
