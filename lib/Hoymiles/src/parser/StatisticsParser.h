@@ -142,6 +142,7 @@ public:
 
     void zeroRuntimeData();
     void zeroDailyData();
+    void resetYieldDayAtMidnight();
     void resetYieldDayCorrection();
 
     // Update time when new data from the inverter is received
@@ -155,7 +156,10 @@ public:
     void setYieldDayCorrection(const bool enabled);
 
 private:
-    void zeroFields(const FieldId_t* fields);
+    float getRawChannelFieldValue(const ChannelType_t type, const ChannelNum_t channel, const FieldId_t fieldId);
+    float getMidnightYieldDayBaseline(const ChannelType_t type, const ChannelNum_t channel, const FieldId_t fieldId) const;
+    void updateMidnightYieldDayBaseline();
+    void zeroFields(const FieldId_t* fields, const uint8_t fieldCount);
 
     uint8_t _payloadStatistic[STATISTIC_PACKET_SIZE] = {};
     uint8_t _statisticLength = 0;
@@ -171,4 +175,7 @@ private:
 
     bool _enableYieldDayCorrection = false;
     float _lastYieldDay[CH_CNT] = {};
+    bool _midnightYieldDayBaselinePending[CH_CNT] = {};
+    bool _midnightYieldDayBaselineActive[CH_CNT] = {};
+    float _midnightYieldDayBaseline[CH_CNT] = {};
 };

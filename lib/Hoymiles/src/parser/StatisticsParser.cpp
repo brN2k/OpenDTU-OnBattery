@@ -103,6 +103,8 @@ void StatisticsParser::endAppendFragment()
 {
     Parser::endAppendFragment();
 
+    updateMidnightYieldDayBaseline();
+
     if (!_enableYieldDayCorrection) {
         resetYieldDayCorrection();
         return;
@@ -150,35 +152,22 @@ float StatisticsParser::getChannelFieldValue(const ChannelType_t type, const Cha
         return 0;
     }
 
-    uint8_t ptr = pos->start;
-    const uint8_t end = ptr + pos->num;
     const uint16_t div = pos->div;
 
     if (CMD_CALC != div) {
-        // Value is a static value
-        uint32_t val = 0;
-        HOY_SEMAPHORE_TAKE();
-        do {
-            val <<= 8;
-            val |= _payloadStatistic[ptr];
-        } while (++ptr != end);
-        HOY_SEMAPHORE_GIVE();
-
-        float result;
-        if (pos->isSigned && pos->num == 2) {
-            result = static_cast<float>(static_cast<int16_t>(val));
-        } else if (pos->isSigned && pos->num == 4) {
-            result = static_cast<float>(static_cast<int32_t>(val));
-        } else {
-            result = static_cast<float>(val);
-        }
-
-        result /= static_cast<float>(div);
+        float result = getRawChannelFieldValue(type, channel, fieldId);
 
         const fieldSettings_t* setting = getSettingByChannelField(type, channel, fieldId);
         if (setting != nullptr && _statisticLength > 0) {
             result += setting->offset;
         }
+
+        const float midnightYieldDayBaseline = getMidnightYieldDayBaseline(type, channel, fieldId);
+        result -= midnightYieldDayBaseline;
+        if (midnightYieldDayBaseline > 0 && result < 0) {
+            return 0;
+        }
+
         return result;
     } else {
         // Value has to be calculated
@@ -202,6 +191,8 @@ bool StatisticsParser::setChannelFieldValue(const ChannelType_t type, const Chan
     if (CMD_CALC == div) {
         return false;
     }
+
+    value += getMidnightYieldDayBaseline(type, channel, fieldId);
 
     const fieldSettings_t* setting = getSettingByChannelField(type, channel, fieldId);
     if (setting != nullptr) {
@@ -333,12 +324,12 @@ uint32_t StatisticsParser::getRxFailureCount() const
 
 void StatisticsParser::zeroRuntimeData()
 {
-    zeroFields(runtimeFields);
+    zeroFields(runtimeFields, sizeof(runtimeFields) / sizeof(runtimeFields[0]));
 }
 
 void StatisticsParser::zeroDailyData()
 {
-    zeroFields(dailyProductionFields);
+    zeroFields(dailyProductionFields, sizeof(dailyProductionFields) / sizeof(dailyProductionFields[0]));
 }
 
 void StatisticsParser::setLastUpdate(const uint32_t lastUpdate)
@@ -367,12 +358,94 @@ void StatisticsParser::setYieldDayCorrection(const bool enabled)
     _enableYieldDayCorrection = enabled;
 }
 
-void StatisticsParser::zeroFields(const FieldId_t* fields)
+void StatisticsParser::resetYieldDayAtMidnight()
+{
+    resetYieldDayCorrection();
+
+    for (auto& c : getChannelsByType(TYPE_DC)) {
+        const uint8_t idx = static_cast<uint8_t>(c);
+        _midnightYieldDayBaselinePending[idx] = true;
+        _midnightYieldDayBaselineActive[idx] = false;
+        _midnightYieldDayBaseline[idx] = 0;
+    }
+
+    zeroDailyData();
+}
+
+float StatisticsParser::getRawChannelFieldValue(const ChannelType_t type, const ChannelNum_t channel, const FieldId_t fieldId)
+{
+    const byteAssign_t* pos = getAssignmentByChannelField(type, channel, fieldId);
+    if (pos == nullptr || CMD_CALC == pos->div) {
+        return 0;
+    }
+
+    uint8_t ptr = pos->start;
+    const uint8_t end = ptr + pos->num;
+    const uint16_t div = pos->div;
+
+    uint32_t val = 0;
+    HOY_SEMAPHORE_TAKE();
+    do {
+        val <<= 8;
+        val |= _payloadStatistic[ptr];
+    } while (++ptr != end);
+    HOY_SEMAPHORE_GIVE();
+
+    float result;
+    if (pos->isSigned && pos->num == 2) {
+        result = static_cast<float>(static_cast<int16_t>(val));
+    } else if (pos->isSigned && pos->num == 4) {
+        result = static_cast<float>(static_cast<int32_t>(val));
+    } else {
+        result = static_cast<float>(val);
+    }
+
+    return result / static_cast<float>(div);
+}
+
+float StatisticsParser::getMidnightYieldDayBaseline(const ChannelType_t type, const ChannelNum_t channel, const FieldId_t fieldId) const
+{
+    if (type != TYPE_DC || fieldId != FLD_YD || channel >= CH_CNT) {
+        return 0;
+    }
+
+    const uint8_t idx = static_cast<uint8_t>(channel);
+    return _midnightYieldDayBaselineActive[idx] ? _midnightYieldDayBaseline[idx] : 0;
+}
+
+void StatisticsParser::updateMidnightYieldDayBaseline()
+{
+    for (auto& c : getChannelsByType(TYPE_DC)) {
+        const uint8_t idx = static_cast<uint8_t>(c);
+        if (!hasChannelFieldValue(TYPE_DC, c, FLD_YD)) {
+            continue;
+        }
+
+        const float rawYieldDay = getRawChannelFieldValue(TYPE_DC, c, FLD_YD);
+
+        if (_midnightYieldDayBaselinePending[idx]) {
+            _midnightYieldDayBaseline[idx] = rawYieldDay;
+            _midnightYieldDayBaselineActive[idx] = rawYieldDay > 0;
+            _midnightYieldDayBaselinePending[idx] = false;
+
+            ESP_LOGI(TAG, "Yield Day midnight baseline captured: channel %u, raw %.0f Wh",
+                static_cast<unsigned>(idx), rawYieldDay);
+        } else if (_midnightYieldDayBaselineActive[idx] && rawYieldDay < _midnightYieldDayBaseline[idx]) {
+            ESP_LOGI(TAG, "Yield Day midnight baseline released: channel %u, raw %.0f Wh, baseline %.0f Wh",
+                static_cast<unsigned>(idx), rawYieldDay, _midnightYieldDayBaseline[idx]);
+
+            _midnightYieldDayBaselineActive[idx] = false;
+            _midnightYieldDayBaseline[idx] = 0;
+        }
+    }
+}
+
+void StatisticsParser::zeroFields(const FieldId_t* fields, const uint8_t fieldCount)
 {
     // Loop all channels
     for (auto& t : getChannelTypes()) {
         for (auto& c : getChannelsByType(t)) {
-            for (uint8_t i = 0; i < (sizeof(runtimeFields) / sizeof(runtimeFields[0])); i++) {
+            for (uint8_t i = 0; i < fieldCount; i++) {
                 if (hasChannelFieldValue(t, c, fields[i])) {
                     setChannelFieldValue(t, c, fields[i], 0);
                 }

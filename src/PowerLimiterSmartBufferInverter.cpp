@@ -63,6 +63,15 @@ uint16_t PowerLimiterSmartBufferInverter::applyReduction(uint16_t reduction, boo
 
     auto low = std::min(getCurrentLimitWatts(), currentOutputAcWatts);
     if (low <= _config.LowerPowerLimit) {
+        // The limit report can temporarily be stale or inconsistent with the
+        // measured AC output. Reassert the lower limit when it can satisfy the
+        // complete requested reduction, otherwise avoid overshooting it.
+        auto reducibleOutput = currentOutputAcWatts - _config.LowerPowerLimit;
+        if (reducibleOutput > 0 && reduction >= reducibleOutput) {
+            setAcOutput(_config.LowerPowerLimit);
+            return reducibleOutput;
+        }
+
         if (allowStandby && _config.AllowStandby) {
             standby();
             return std::min(reduction, currentOutputAcWatts);
