@@ -88,6 +88,13 @@ bool Controller::isDataValid() const
     return _upProvider->isDataValid();
 }
 
+bool Controller::requestImmediatePoll()
+{
+    std::lock_guard<std::mutex> l(_mutex);
+    if (!_upProvider) { return false; }
+    return _upProvider->requestImmediatePoll();
+}
+
 void Controller::loop()
 {
     std::lock_guard<std::mutex> lock(_mutex);

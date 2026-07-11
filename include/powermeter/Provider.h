@@ -27,6 +27,7 @@ public:
 
     virtual void loop() = 0;
     virtual bool isDataValid() const;
+    virtual bool requestImmediatePoll() { return false; }
 
     float getPowerTotal() const;
     uint32_t getLastUpdate() const { return _dataCurrent.getLastUpdate(); }

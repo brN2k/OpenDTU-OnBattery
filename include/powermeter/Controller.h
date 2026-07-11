@@ -17,6 +17,7 @@ public:
     float getPowerTotal() const;
     uint32_t getLastUpdate() const;
     bool isDataValid() const;
+    bool requestImmediatePoll();
 
 private:
     void loop();

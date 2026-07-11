@@ -27,13 +27,14 @@ public:
     bool init() final;
     void loop() final;
     bool isDataValid() const final;
+    bool requestImmediatePoll() final;
 
     using poll_result_t = std::variant<DataPointContainer, String>;
     poll_result_t poll();
 
 private:
     static void pollingLoopHelper(void* context);
-    std::atomic<bool> _taskDone;
+    std::atomic<bool> _taskDone = false;
     void pollingLoop();
 
     PowerMeterHttpJsonConfig const _cfg;
@@ -43,7 +44,8 @@ private:
     std::array<std::unique_ptr<HttpGetter>, POWERMETER_HTTP_JSON_MAX_VALUES> _httpGetters;
 
     TaskHandle_t _taskHandle = nullptr;
-    bool _stopPolling;
+    bool _stopPolling = false;
+    bool _immediatePollRequested = false;
     mutable std::mutex _pollingMutex;
     std::condition_variable _cv;
 };

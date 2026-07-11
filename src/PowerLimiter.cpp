@@ -215,6 +215,12 @@ void PowerLimiterClass::loop()
     static constexpr uint32_t powerMeterSettleTimeMs = 500;
     if (PowerMeter.isDataValid()
             && powerMeterLastUpdate <= (latestInverterStats + powerMeterSettleTimeMs)) {
+        if (latestInverterStats != 0
+                && latestInverterStats != _lastImmediatePowerMeterPollInverterStats
+                && PowerMeter.requestImmediatePoll()) {
+            _lastImmediatePowerMeterPollInverterStats = latestInverterStats;
+            DTU_LOGD("requested immediate power meter poll after fresh inverter data");
+        }
         return announceStatus(Status::PowerMeterPending);
     }
 

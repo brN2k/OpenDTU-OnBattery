@@ -130,6 +130,7 @@ using PowerMeterHttpJsonValue = struct POWERMETER_HTTP_JSON_VALUE_T;
 struct POWERMETER_HTTP_JSON_CONFIG_T {
     uint32_t PollingInterval;
     bool IndividualRequests;
+    bool ImmediatePollAfterInverterUpdate;
     PowerMeterHttpJsonValue Values[POWERMETER_HTTP_JSON_MAX_VALUES];
 };
 using PowerMeterHttpJsonConfig = struct POWERMETER_HTTP_JSON_CONFIG_T;

@@ -27,6 +27,7 @@ export interface PowerMeterHttpJsonValue {
 export interface PowerMeterHttpJsonConfig {
     polling_interval: number;
     individual_requests: boolean;
+    immediate_poll_after_inverter_update: boolean;
     values: Array<PowerMeterHttpJsonValue>;
 }
 

@@ -156,6 +156,14 @@
                         />
 
                         <InputElement
+                            :label="$t('powermeteradmin.httpImmediatePoll')"
+                            :tooltip="$t('powermeteradmin.httpImmediatePollHint')"
+                            v-model="powerMeterConfigList.http_json.immediate_poll_after_inverter_update"
+                            type="checkbox"
+                            wide
+                        />
+
+                        <InputElement
                             :label="$t('powermeteradmin.pollingInterval')"
                             v-model="powerMeterConfigList.http_json.polling_interval"
                             type="number"

@@ -104,6 +104,7 @@ void ConfigurationClass::serializePowerMeterHttpJsonConfig(PowerMeterHttpJsonCon
 {
     target["polling_interval"] = source.PollingInterval;
     target["individual_requests"] = source.IndividualRequests;
+    target["immediate_poll_after_inverter_update"] = source.ImmediatePollAfterInverterUpdate;
 
     JsonArray values = target["values"].to<JsonArray>();
     for (size_t i = 0; i < POWERMETER_HTTP_JSON_MAX_VALUES; ++i) {
@@ -578,6 +579,8 @@ void ConfigurationClass::deserializePowerMeterHttpJsonConfig(JsonObject const& s
 {
     target.PollingInterval = source["polling_interval"] | POWERMETER_POLLING_INTERVAL;
     target.IndividualRequests = source["individual_requests"] | false;
+    target.ImmediatePollAfterInverterUpdate = source["immediate_poll_after_inverter_update"]
+            | POWERMETER_HTTP_JSON_IMMEDIATE_POLL;
 
     JsonArray values = source["values"].as<JsonArray>();
     for (size_t i = 0; i < POWERMETER_HTTP_JSON_MAX_VALUES; ++i) {

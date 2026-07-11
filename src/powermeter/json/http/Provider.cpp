@@ -57,6 +57,20 @@ bool Provider::init()
     return true;
 }
 
+bool Provider::requestImmediatePoll()
+{
+    if (!_cfg.ImmediatePollAfterInverterUpdate) { return false; }
+
+    {
+        std::lock_guard<std::mutex> lock(_pollingMutex);
+        if (_stopPolling) { return false; }
+        _immediatePollRequested = true;
+    }
+
+    _cv.notify_all();
+    return true;
+}
+
 void Provider::loop()
 {
     if (_taskHandle != nullptr) { return; }
@@ -85,12 +99,14 @@ void Provider::pollingLoop()
     while (!_stopPolling) {
         auto elapsedMillis = millis() - _lastPoll;
         auto intervalMillis = _cfg.PollingInterval * 1000;
-        if (_lastPoll > 0 && elapsedMillis < intervalMillis) {
+        if (_lastPoll > 0 && elapsedMillis < intervalMillis && !_immediatePollRequested) {
             auto sleepMs = intervalMillis - elapsedMillis;
             _cv.wait_for(lock, std::chrono::milliseconds(sleepMs),
-                    [this] { return _stopPolling; }); // releases the mutex
+                    [this] { return _stopPolling || _immediatePollRequested; }); // releases the mutex
             continue;
         }
+
+        _immediatePollRequested = false;
 
         _lastPoll = millis();
 

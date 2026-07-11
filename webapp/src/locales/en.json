@@ -666,6 +666,8 @@
         "ipAddress": "IP Address",
         "HTTP": "HTTP(S) + JSON - General configuration",
         "httpIndividualRequests": "Individual HTTP(S) requests per value",
+        "httpImmediatePoll": "Poll immediately after inverter update",
+        "httpImmediatePollHint": "Request a fresh power-meter reading as soon as updated inverter output data is available. This can make dynamic power limiting react faster.",
         "urlExamplesHeading": "URL Examples",
         "jsonPathExamplesHeading": "JSON Path Examples",
         "jsonPathExamplesExplanation": "The following paths each find the value '123.4' in the respective example JSON.",
